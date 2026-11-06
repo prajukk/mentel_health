@@ -1,0 +1,20 @@
+{
+  "text": {
+    "model": "random_forest",
+    "validation_f1": 0.810641627543036,
+    "validation_roc_auc": 0.8586959239809953,
+    "test_f1": 0.7762326169405815
+  },
+  "behavior": {
+    "model": "linear_svm",
+    "validation_f1": 0.7015706806282722,
+    "validation_roc_auc": 0.6164603650912728,
+    "test_f1": 0.678609062170706
+  },
+  "both": {
+    "model": "random_forest",
+    "validation_f1": 0.8150470219435737,
+    "validation_roc_auc": 0.8643098274568641,
+    "test_f1": 0.7776365946632783
+  }
+}

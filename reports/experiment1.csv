@@ -1,0 +1,10 @@
+features,model,accuracy,precision,recall,f1,roc_auc
+text,logistic_regression,0.6755,0.677,0.71,0.6931,0.7247
+text,linear_svm,0.6462,0.6457,0.6965,0.6701,0.6959
+text,random_forest,0.7524,0.7275,0.832,0.7762,0.8322
+behavior,logistic_regression,0.5818,0.5729,0.7453,0.6478,0.5908
+behavior,linear_svm,0.5734,0.5552,0.8726,0.6786,0.5998
+behavior,random_forest,0.5664,0.5766,0.6016,0.5889,0.5842
+both,logistic_regression,0.6755,0.6761,0.7127,0.6939,0.7302
+both,linear_svm,0.6392,0.6377,0.6965,0.6658,0.6986
+both,random_forest,0.7552,0.7321,0.8293,0.7776,0.8326

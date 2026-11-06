@@ -1,0 +1,409 @@
+import json
+from functools import lru_cache
+from pathlib import Path
+
+import joblib
+import nltk
+import numpy as np
+from nltk.sentiment import SentimentIntensityAnalyzer
+from scipy import sparse
+
+from backend.external_apis import explain, read_appearance, read_writing, transcribe
+from backend.features_image import extract_image
+from backend.features_text import text_matrix
+from backend.features_voice import extract_voice
+
+ROOT = Path(__file__).resolve().parents[1]
+ARTIFACT_DIR = ROOT / "backend" / "artifacts"
+REPORT_DIR = ROOT / "reports"
+LOW_THRESHOLD = 0.40
+MODERATE_THRESHOLD = 0.70
+
+
+class PredictionInputError(ValueError):
+    pass
+
+
+@lru_cache(maxsize=1)
+def load_resources():
+    nltk.download("vader_lexicon", quiet=True)
+    names = json.loads((ARTIFACT_DIR / "feature_names.json").read_text(encoding="utf-8"))
+    return {
+        "analyzer": SentimentIntensityAnalyzer(),
+        "vectorizer": joblib.load(ARTIFACT_DIR / "tfidf.joblib"),
+        "models": {
+            "text": joblib.load(ARTIFACT_DIR / "model_text.joblib"),
+            "behavior": joblib.load(ARTIFACT_DIR / "model_behavior.joblib"),
+            "both": joblib.load(ARTIFACT_DIR / "model_both.joblib"),
+        },
+        "names": {
+            "text": names["text"],
+            "behavior": names["behavior"],
+            "both": names["text"] + names["behavior"],
+        },
+    }
+
+
+def risk_level(probability):
+    if probability < LOW_THRESHOLD:
+        return "low"
+    if probability <= MODERATE_THRESHOLD:
+        return "moderate"
+    return "high"
+
+
+def positive_probability(pipeline, features):
+    model = pipeline.named_steps["model"]
+    if hasattr(model, "predict_proba"):
+        return float(pipeline.predict_proba(features)[0, 1])
+    decision = float(np.ravel(pipeline.decision_function(features))[0])
+    return float(1.0 / (1.0 + np.exp(-decision)))
+
+
+def describe_feature(name, value):
+    if name == "vader_compound":
+        if value < -0.05:
+            return "negative sentiment in the writing"
+        if value > 0.05:
+            return "positive sentiment in the writing"
+        return None
+    if name == "first_person_ratio" and value >= 0.05:
+        return "high first-person pronoun use"
+    if name == "type_token_ratio" and value > 0:
+        return "vocabulary variety in the writing"
+    if name == "word_count" and value > 0:
+        return f"writing length of {int(value)} words"
+    if name == "hour":
+        hour = int(value)
+        if hour >= 22 or hour <= 5:
+            return "late-night writing time"
+        return f"writing time {hour:02d}:00"
+    if name == "social_karma":
+        return "karma from responses"
+    if name == "social_upvote_ratio":
+        return "upvote ratio"
+    if name == "social_num_comments":
+        return "comment count"
+    if name.startswith("tfidf_") and value > 0:
+        word = name.removeprefix("tfidf_")
+        if word in {
+            "today", "day", "time", "just", "like", "really", "know", "going", "people",
+            "thing", "things", "got", "get", "im", "dont", "was", "were", "its", "this",
+            "that", "with", "have", "had", "been", "about", "would", "could", "there",
+            "then", "than", "very", "much", "even", "still", "also", "from", "your",
+            "you", "what", "when", "where", "which", "who", "how", "why",
+        }:
+            return None
+        return f"the word “{word}”"
+    return None
+
+
+def top_cues(pipeline, features, names, limit=5):
+    model = pipeline.named_steps["model"]
+    raw = features.toarray().ravel() if sparse.issparse(features) else np.asarray(features).ravel()
+    scaled_values = pipeline.named_steps["scale"].transform(features)
+    if sparse.issparse(scaled_values):
+        scaled = scaled_values.toarray().ravel()
+    else:
+        scaled = np.asarray(scaled_values).ravel()
+    if hasattr(model, "feature_importances_"):
+        rank = np.abs(scaled) * np.asarray(model.feature_importances_).ravel()
+    else:
+        rank = np.abs(np.asarray(model.coef_).ravel() * scaled)
+    cues = []
+    for index in np.argsort(-rank):
+        if len(cues) == limit:
+            break
+        phrase = describe_feature(names[index], raw[index])
+        if phrase and phrase not in cues:
+            cues.append(phrase)
+    return cues
+
+
+DAILY_OPTIONS = {
+    "sleep": {
+        "well": (0, "Sleep was about usual."),
+        "short": (1, "Sleep was shorter than usual."),
+        "poor": (2, "Sleep was poor."),
+        "none": (2, "There was almost no sleep."),
+    },
+    "energy": {
+        "usual": (0, "Energy was about usual."),
+        "low": (1, "Energy was low."),
+        "very_low": (2, "Energy was very low."),
+    },
+    "company": {
+        "yes": (0, "There was time with other people."),
+        "little": (1, "There was little time with other people."),
+        "no": (2, "Most of the day was spent away from other people."),
+    },
+    "routine": {
+        "yes": (0, "The usual routine was kept."),
+        "partly": (1, "The usual routine was only partly kept."),
+        "no": (2, "The usual routine was not kept."),
+    },
+}
+
+
+def daily_level(points):
+    if points <= 1:
+        return "low"
+    if points <= 4:
+        return "moderate"
+    return "high"
+
+
+def daily_behavior_report(sleep, energy, company, routine):
+    raw = {"sleep": sleep, "energy": energy, "company": company, "routine": routine}
+    cleaned = {key: (None if value is None or str(value).strip() == "" else str(value).strip()) for key, value in raw.items()}
+    if all(value is None for value in cleaned.values()):
+        return None
+    if any(value is None for value in cleaned.values()):
+        raise PredictionInputError("Answer all four behavior questions, or leave them all empty.")
+    notes = []
+    points = 0
+    answers = {}
+    for key, choice in cleaned.items():
+        option = DAILY_OPTIONS[key].get(choice)
+        if option is None:
+            raise PredictionInputError("Answer the behavior questions with one of the given choices.")
+        weight, note = option
+        points += weight
+        notes.append(note)
+        answers[key] = choice
+    return {
+        "level": daily_level(points),
+        "points": points,
+        "out_of": 8,
+        "notes": notes,
+        "answers": answers,
+    }
+
+
+def behavior_row(hour, karma, upvote_ratio, comment_count):
+    return np.asarray([[hour, karma, upvote_ratio, comment_count]], dtype=np.float32)
+
+
+def behavior_report(hour, karma, upvote_ratio, comment_count):
+    hour = int(hour)
+    suffix = "am" if hour < 12 else "pm"
+    hour12 = 12 if hour % 12 == 0 else hour % 12
+    clock = f"{hour12}:00 {suffix}"
+    if hour >= 22 or hour <= 5:
+        when = f"Written late at night, {clock}."
+    elif hour < 12:
+        when = f"Written in the morning, {clock}."
+    elif hour < 17:
+        when = f"Written in the afternoon, {clock}."
+    else:
+        when = f"Written in the evening, {clock}."
+    response = float(karma)
+    if response <= 2:
+        response_line = f"Response score {response:g}, a small response."
+    else:
+        response_line = f"Response score {response:g}."
+    share = float(upvote_ratio)
+    if share >= 0.8:
+        tone = "Most of those responses were positive."
+    elif share >= 0.5:
+        tone = "More responses were positive than negative."
+    else:
+        tone = "More responses were negative than positive."
+    replies = int(float(comment_count))
+    if replies == 0:
+        reply_line = "No replies."
+    elif replies == 1:
+        reply_line = "1 reply."
+    else:
+        reply_line = f"{replies} replies."
+    return {
+        "hour": hour,
+        "karma": response,
+        "upvote_ratio": share,
+        "comment_count": replies,
+        "notes": [
+            when,
+            response_line,
+            f"{round(share * 100)}% of responses were positive. {tone}",
+            reply_line,
+        ],
+    }
+
+
+def voice_summary(audio_path):
+    extracted = extract_voice(audio_path)
+    summary = {
+        "used_in_score": False,
+        "speaking_rate": round(extracted["speaking_rate"], 4),
+        "pause_ratio": round(extracted["pause_ratio"], 4),
+        "pause_count": extracted["pause_count"],
+        "pitch_mean": round(extracted["pitch_mean"], 4),
+        "loudness": round(extracted["loudness"], 4),
+        "jitter": round(extracted["jitter"], 4),
+        "transcript": None,
+    }
+    transcript = transcribe(audio_path)
+    if transcript:
+        summary["transcript"] = transcript
+    return summary
+
+
+def image_summary(image_path):
+    summary = extract_image(image_path)
+    summary["writing"] = read_writing(image_path)
+    look = read_appearance(image_path)
+    summary["appearance"] = look["appearance"] if look else None
+    summary["appearance_note"] = look["note"] if look else None
+    summary["appearance_level"] = look["level"] if look else None
+    summary["used_in_score"] = False
+    return summary
+
+
+def image_fact(image):
+    if not image:
+        return None
+    parts = []
+    if image.get("appearance") and image.get("appearance_note"):
+        parts.append(f"Looks {image['appearance']}. {image['appearance_note']}")
+    if image.get("writing"):
+        parts.append(image["writing"])
+    return " ".join(parts) or None
+
+
+def screen_flag(daily, image):
+    look = image.get("appearance_level") if image else None
+    rank = {"low": 0, "moderate": 1, "high": 2}
+    if daily and look:
+        level = daily["level"] if rank[daily["level"]] >= rank[look] else look
+        return {"level": level, "source": "both"}
+    if daily:
+        return {"level": daily["level"], "source": "behavior"}
+    if look:
+        return {"level": look, "source": "photo"}
+    return None
+
+
+def predict_risk(
+    text,
+    hour,
+    karma,
+    upvote_ratio,
+    comment_count,
+    audio_path=None,
+    image_path=None,
+    sleep=None,
+    energy=None,
+    company=None,
+    routine=None,
+):
+    resources = load_resources()
+    cleaned = str(text or "").strip()
+    voice = voice_summary(audio_path) if audio_path else None
+    image = None
+    if image_path:
+        try:
+            image = image_summary(image_path)
+        except ValueError as error:
+            raise PredictionInputError(str(error)) from error
+    text_from_voice = False
+    if voice and voice["transcript"] and not cleaned:
+        cleaned = voice["transcript"]
+        voice["used_in_score"] = True
+        text_from_voice = True
+    elif image and image["writing"] and not cleaned:
+        cleaned = image["writing"]
+        image["used_in_score"] = True
+    has_text = bool(cleaned)
+    behavior_values = (hour, karma, upvote_ratio, comment_count)
+    has_behavior = all(value is not None for value in behavior_values)
+    daily = daily_behavior_report(sleep, energy, company, routine)
+    photo_level = image.get("appearance_level") if image else None
+    if not has_text and not has_behavior and daily is None and not photo_level:
+        raise PredictionInputError("Provide journal text, the behavior answers, or a photo of a person.")
+
+    text_features = None
+    if has_text:
+        text_features = text_matrix([cleaned], resources["analyzer"], resources["vectorizer"])
+    behavior_features = behavior_row(*behavior_values) if has_behavior else None
+
+    if has_text and has_behavior:
+        route = "both"
+        features = sparse.hstack([text_features, sparse.csr_matrix(behavior_features)], format="csr")
+        used = ["text", "behavior"]
+    elif has_text:
+        route = "text"
+        features = text_features
+        used = ["text"]
+    else:
+        route = "behavior"
+        features = behavior_features
+        used = ["behavior"]
+
+    if not has_text and not has_behavior and (daily is not None or photo_level):
+        shown = screen_flag(daily, image)
+        level = shown["level"]
+        notes = list(daily["notes"]) if daily else []
+        if image and image.get("appearance_note"):
+            notes.append(image["appearance_note"])
+        share = daily["points"] / daily["out_of"] if daily else {"low": 0.2, "moderate": 0.55, "high": 0.8}[level]
+        return {
+            "risk_level": level,
+            "probability": round(share, 4),
+            "inputs_used": ["behavior"] if daily else ["image"],
+            "inputs_missing": [] if text_from_voice else ["voice"],
+            "voice_recorded": voice is not None,
+            "voice": voice,
+            "image": image,
+            "behavior": None,
+            "daily_behavior": daily,
+            "screen": shown,
+            "cues": [],
+            "explanation": explain(level, share, [], "", notes or None, voice, image_fact(image)),
+            "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},
+            "disclaimer": "This is a screening flag, not a clinical diagnosis.",
+        }
+
+    pipeline = resources["models"][route]
+    probability = positive_probability(pipeline, features)
+    level = risk_level(probability)
+    cues = top_cues(pipeline, features, resources["names"][route])
+    scored_text = cleaned if has_text else ""
+    behavior = behavior_report(*behavior_values) if has_behavior else None
+    shown = screen_flag(daily, image)
+    notes = list(daily["notes"]) if daily else (behavior["notes"] if behavior else None)
+
+    return {
+        "risk_level": level,
+        "probability": round(probability, 4),
+        "inputs_used": used,
+        "inputs_missing": [] if text_from_voice else ["voice"],
+        "voice_recorded": voice is not None,
+        "voice": voice,
+        "image": image,
+        "behavior": behavior,
+        "daily_behavior": daily,
+        "screen": shown,
+        "cues": cues,
+        "explanation": explain(
+            shown["level"] if shown else level,
+            probability,
+            cues,
+            scored_text,
+            notes,
+            voice,
+            image_fact(image),
+        ),
+        "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},
+        "disclaimer": "This is a screening flag, not a clinical diagnosis.",
+    }
+
+
+def load_metrics():
+    import pandas as pd
+
+    experiment1 = pd.read_csv(REPORT_DIR / "experiment1.csv")
+    experiment2 = pd.read_csv(REPORT_DIR / "experiment2.csv")
+    return {
+        "experiment1": experiment1.to_dict(orient="records"),
+        "experiment2": experiment2.to_dict(orient="records"),
+    }

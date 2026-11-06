@@ -1,0 +1,8 @@
+condition,model,accuracy,precision,recall,f1,roc_auc,f1_drop
+full,random_forest,0.7552,0.7321,0.8293,0.7776,0.8326,0.0
+text_missing,linear_svm,0.5734,0.5552,0.8726,0.6786,0.5998,0.099
+behavior_missing,random_forest,0.7524,0.7275,0.832,0.7762,0.8322,0.0014
+behavior_hidden_0,random_forest_missing_flag,0.751,0.7268,0.8293,0.7747,0.8354,0.003
+behavior_hidden_10,random_forest_missing_flag,0.7497,0.7273,0.8238,0.7726,0.835,0.0051
+behavior_hidden_30,random_forest_missing_flag,0.7497,0.7262,0.8266,0.7731,0.8338,0.0045
+behavior_hidden_50,random_forest_missing_flag,0.7455,0.721,0.8266,0.7702,0.8319,0.0074

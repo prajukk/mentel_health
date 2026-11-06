@@ -1,0 +1,16 @@
+pandas
+numpy
+scikit-learn
+nltk
+librosa
+soundfile
+joblib
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+requests
+httpx
+pillow
+matplotlib
+seaborn
