@@ -16,6 +16,7 @@ app.add_middleware(
 )
 AUDIO_SUFFIXES = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+MAX_FILE_BYTES = 15 * 1024 * 1024  # 15 MB limit per uploaded file
 
 
 @app.get("/health")
@@ -55,17 +56,24 @@ async def predict(
 ):
     audio_path = None
     image_path = None
-    if audio is not None and audio.filename:
-        temporary = NamedTemporaryFile(delete=False, suffix=kept_suffix(audio.filename, AUDIO_SUFFIXES, ".wav"))
-        temporary.write(await audio.read())
-        temporary.close()
-        audio_path = temporary.name
-    if image is not None and image.filename:
-        temporary = NamedTemporaryFile(delete=False, suffix=kept_suffix(image.filename, IMAGE_SUFFIXES, ".png"))
-        temporary.write(await image.read())
-        temporary.close()
-        image_path = temporary.name
     try:
+        if audio is not None and audio.filename:
+            audio_bytes = await audio.read()
+            if len(audio_bytes) > MAX_FILE_BYTES:
+                raise HTTPException(status_code=413, detail="Audio file exceeds maximum allowed size (15 MB).")
+            temporary = NamedTemporaryFile(delete=False, suffix=kept_suffix(audio.filename, AUDIO_SUFFIXES, ".wav"))
+            temporary.write(audio_bytes)
+            temporary.close()
+            audio_path = temporary.name
+        if image is not None and image.filename:
+            image_bytes = await image.read()
+            if len(image_bytes) > MAX_FILE_BYTES:
+                raise HTTPException(status_code=413, detail="Image file exceeds maximum allowed size (15 MB).")
+            temporary = NamedTemporaryFile(delete=False, suffix=kept_suffix(image.filename, IMAGE_SUFFIXES, ".png"))
+            temporary.write(image_bytes)
+            temporary.close()
+            image_path = temporary.name
+
         return predict_risk(
             text,
             hour,

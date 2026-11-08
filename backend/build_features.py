@@ -18,10 +18,12 @@ DATA_PATH = ROOT / "data" / "processed" / "dreaddit.csv"
 PROCESSED_DIR = ROOT / "data" / "processed"
 ARTIFACT_DIR = ROOT / "backend" / "artifacts"
 SAMPLE_VOICE = ROOT / "data" / "raw" / "sample_voice.wav"
+NLTK_DIR = ROOT / "nltk_data"
+if str(NLTK_DIR) not in nltk.data.path:
+    nltk.data.path.insert(0, str(NLTK_DIR))
 
 
 def ensure_vader():
-    nltk.download("vader_lexicon", quiet=True)
     return SentimentIntensityAnalyzer()
 
 

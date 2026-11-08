@@ -144,7 +144,15 @@ function MissingLine({ rows }) {
   )
 }
 
-export default function Evaluation({ account, onHome, onHistory, onEvaluation, onSignOut }) {
+export default function Evaluation({
+  account,
+  onHome,
+  onHistory,
+  onEvaluation,
+  onSignOut,
+  onNewCheckIn,
+  historyCount = 0,
+}) {
   const [metrics, setMetrics] = useState(null)
   const [error, setError] = useState("")
 
@@ -164,10 +172,48 @@ export default function Evaluation({ account, onHome, onHistory, onEvaluation, o
 
   return (
     <section className="page">
-      <Header account={account} onHome={onHome} onHistory={onHistory} onEvaluation={onEvaluation} onSignOut={onSignOut} />
-      <div className="mx-auto mt-12 max-w-5xl space-y-12">
+      <Header
+        currentView="evaluation"
+        account={account}
+        onHome={onHome}
+        onNewCheckIn={onNewCheckIn}
+        onHistory={onHistory}
+        onEvaluation={onEvaluation}
+        onSignOut={onSignOut}
+        historyCount={historyCount}
+      />
+      <div className="mx-auto mt-8 max-w-5xl space-y-10">
+        {/* Top Breadcrumb Navigation */}
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted sm:text-sm">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onHome}
+              className="flex items-center gap-1 text-accent transition-colors hover:underline"
+            >
+              <Icon name="home" className="h-3.5 w-3.5" />
+              <span>Home</span>
+            </button>
+            <Icon name="chevronRight" className="h-3.5 w-3.5 text-muted/60" />
+            <span className="text-ink font-medium">Model Evaluation</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onNewCheckIn && (
+              <button
+                type="button"
+                onClick={onNewCheckIn}
+                className="flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
+              >
+                <Icon name="plus" className="h-3.5 w-3.5" />
+                <span>Take new check-in</span>
+              </button>
+            )}
+          </div>
+        </nav>
+
         <div>
-          <p className="text-sm text-muted">Experiment 1</p>
+          <p className="eyebrow">Experiment 1 · Benchmark Comparison</p>
           <h1 className="mt-2 flex items-center gap-3 font-display text-4xl">
             <Icon name="evaluation" className="h-8 w-8 text-accent" />
             F1 for text, behavior, and both
@@ -246,6 +292,44 @@ export default function Evaluation({ account, onHome, onHistory, onEvaluation, o
             </div>
           )}
         </div>
+
+        {/* Bottom Navigation & Action Bar */}
+        <div className="rounded-[22px] border border-line bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="font-display text-lg font-semibold text-ink">Ready to try the screening model?</h3>
+              <p className="mt-1 text-xs text-muted">Experience how your journal, habits, voice, and photo are evaluated.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {onNewCheckIn && (
+                <button
+                  type="button"
+                  onClick={onNewCheckIn}
+                  className="flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:opacity-95"
+                >
+                  <Icon name="plus" className="h-4 w-4" />
+                  Take a check-in
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onHistory}
+                className="flex items-center gap-2 rounded-full border border-line bg-paper px-4 py-2.5 text-xs sm:text-sm font-medium text-ink hover:bg-card"
+              >
+                <Icon name="history" className="h-4 w-4 text-accent" />
+                View history
+              </button>
+              <button
+                type="button"
+                onClick={onHome}
+                className="rounded-full border border-line px-4 py-2.5 text-xs sm:text-sm text-muted hover:text-ink hover:bg-paper"
+              >
+                Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+
         {!metrics && !error && <p className="text-muted">Loading evaluation results.</p>}
         {error && <p className="text-high">{error}</p>}
       </div>

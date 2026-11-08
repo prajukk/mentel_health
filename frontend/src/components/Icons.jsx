@@ -42,6 +42,32 @@ const PATHS = {
       <path d="M12 12 16.5 8" />
     </>
   ),
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5v-9Z" />
+      <path d="M9 21v-7h6v7" />
+    </>
+  ),
+  plus: (
+    <>
+      <path d="M12 5v14M5 12h14" />
+    </>
+  ),
+  arrowLeft: (
+    <>
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </>
+  ),
+  chevronRight: (
+    <>
+      <path d="m9 18 6-6-6-6" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="m5 13 4 4L19 7" />
+    </>
+  ),
 }
 
 export default function Icon({ name, className = "h-5 w-5" }) {

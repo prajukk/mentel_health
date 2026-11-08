@@ -10,24 +10,44 @@ const NEXT_STEP = {
 
 function downloadSummary(result) {
   const daily = result.daily_behavior
+  const dateStr = new Date().toLocaleString()
   const lines = [
-    "Mental health risk check",
-    result.disclaimer,
-    daily
-      ? `Behavior: ${daily.level}, ${daily.points} of ${daily.out_of}`
-      : `Level: ${result.risk_level}`,
-    daily ? `Behavior notes: ${daily.notes.join(" ")}` : `Probability: ${Number(result.probability).toFixed(2)}`,
-    result.inputs_used.includes("text")
-      ? `Writing model: ${result.risk_level}, ${Number(result.probability).toFixed(2)}`
+    "==========================================",
+    "       MENTAL HEALTH RISK CHECK REPORT    ",
+    "==========================================",
+    `Date & Time: ${dateStr}`,
+    `Screening Flag: ${result.screen?.level || daily?.level || result.risk_level}`.toUpperCase(),
+    "",
+    "--- MODALITIES EVALUATED ---",
+    `Inputs Used: ${result.inputs_used.join(", ")}`,
+    daily ? `Daily Behavior: ${daily.level} (${daily.points} / ${daily.out_of} signs concerning)` : "",
+    daily ? `Behavior Notes: ${daily.notes.join("; ")}` : "",
+    result.inputs_used.includes("text") ? `Writing Model Probability: ${Number(result.probability).toFixed(4)}` : "",
+    result.voice ? `Voice Acoustic: Pitch ${Math.round(result.voice.pitch_mean)} Hz, Silence ${Math.round(result.voice.pause_ratio * 100)}%, Pauses ${result.voice.pause_count}` : "",
+    result.image?.appearance ? `Photo Appearance: ${result.image.appearance} - ${result.image.appearance_note || ""}` : "",
+    "",
+    "--- KEY CUES & HIGHLIGHTS ---",
+    `Identified Cues: ${(result.cues || []).join("; ") || "None"}`,
+    result.explanation ? `Summary: ${result.explanation}` : "",
+    "",
+    result.crisis_detected
+      ? "--- CRISIS SUPPORT HELPLINES (24/7) ---\n" +
+      "• India (Tele-MANAS): 14416 / 1800-891-4416\n" +
+      "• US & Canada: 988\n" +
+      "• UK (Samaritans): 116 123\n" +
+      "• International: https://findahelpline.com\n"
       : "",
-    `Cues: ${(result.cues || []).join("; ") || "none"}`,
-    "This file does not include the journal text.",
+    "--- IMPORTANT DISCLAIMER ---",
+    result.disclaimer,
+    "This check-in is an early risk indicator and NOT a clinical diagnosis.",
+    "If you are feeling overwhelmed, please speak with a healthcare professional or counsellor.",
+    "==========================================",
   ].filter(Boolean)
   const blob = new Blob([lines.join("\n")], { type: "text/plain" })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
-  link.download = "risk-check.txt"
+  link.download = "mental-health-risk-check.txt"
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -157,7 +177,18 @@ function checkedLine(result) {
   return "The number comes from the saved routine features. No writing was scored."
 }
 
-export default function Result({ result, comparison, account, onEdit, onHome, onHistory, onEvaluation, onSignOut }) {
+export default function Result({
+  result,
+  comparison,
+  account,
+  onEdit,
+  onHome,
+  onHistory,
+  onEvaluation,
+  onSignOut,
+  onNewCheckIn,
+  historyCount = 0,
+}) {
   const daily = result.daily_behavior
   const headline = result.screen?.level || daily?.level || result.risk_level
   const writingCues = result.inputs_used.includes("text")
@@ -178,8 +209,77 @@ export default function Result({ result, comparison, account, onEdit, onHome, on
 
   return (
     <section className="page">
-      <Header account={account} onHome={onHome} onHistory={onHistory} onEvaluation={onEvaluation} onSignOut={onSignOut} />
-      <div className="mx-auto mt-10 max-w-5xl">
+      <Header
+        currentView="result"
+        account={account}
+        onHome={onHome}
+        onNewCheckIn={onNewCheckIn}
+        onHistory={onHistory}
+        onEvaluation={onEvaluation}
+        onSignOut={onSignOut}
+        historyCount={historyCount}
+      />
+      <div className="mx-auto mt-8 max-w-5xl">
+        {/* Top Breadcrumb Navigation */}
+        <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs text-muted sm:text-sm">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onHome}
+              className="flex items-center gap-1 text-accent transition-colors hover:underline"
+            >
+              <Icon name="home" className="h-3.5 w-3.5" />
+              <span>Home</span>
+            </button>
+            <Icon name="chevronRight" className="h-3.5 w-3.5 text-muted/60" />
+            <span className="text-ink font-medium">Check-In Result</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onHome}
+              className="flex items-center gap-1 rounded-full border border-line bg-card px-3 py-1 text-xs text-muted hover:text-ink hover:bg-paper"
+            >
+              <Icon name="arrowLeft" className="h-3 w-3" />
+              <span>Back to Home</span>
+            </button>
+            <button
+              type="button"
+              onClick={onHistory}
+              className="flex items-center gap-1 rounded-full border border-line bg-card px-3 py-1 text-xs text-muted hover:text-ink hover:bg-paper"
+            >
+              <Icon name="history" className="h-3 w-3" />
+              <span>View in History</span>
+            </button>
+          </div>
+        </nav>
+        {result.crisis_detected && (
+          <aside className="mb-6 rounded-[20px] border-2 border-high/40 bg-[#FFF5F4] p-6 text-ink shadow-sm">
+            <div className="flex items-start gap-4">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-high text-lg font-bold text-white">!</span>
+              <div className="flex-1">
+                <h2 className="font-display text-2xl text-high">Support is available right now</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  We noticed your input mentions severe distress. Please know you do not have to carry this alone. Free, confidential support is available 24/7:
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <a href="tel:14416" className="inline-flex items-center gap-2 rounded-full bg-high px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
+                    India: Tele-MANAS (14416)
+                  </a>
+                  <a href="tel:988" className="inline-flex items-center gap-2 rounded-full bg-high px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
+                    US / Canada: 988
+                  </a>
+                  <a href="tel:116123" className="inline-flex items-center gap-2 rounded-full border border-high px-4 py-2 text-sm font-medium text-high hover:bg-high/10">
+                    UK: Samaritans (116 123)
+                  </a>
+                  <a href="https://findahelpline.com/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-4 py-2 text-sm font-medium text-accent hover:bg-paper">
+                    International: findahelpline.com
+                  </a>
+                </div>
+              </div>
+            </div>
+          </aside>
+        )}
         <article className="rounded-[20px] border border-line bg-card p-8">
           <p className={`font-display text-6xl capitalize sm:text-7xl ${LEVEL_COLOR[headline]}`}>
             {headline}
@@ -344,23 +444,60 @@ export default function Result({ result, comparison, account, onEdit, onHome, on
           <p className="mt-3 leading-relaxed">{NEXT_STEP[headline]}</p>
         </article>
 
-        <div className="mt-10 flex flex-wrap items-center gap-6">
-          <a
-            href="https://findahelpline.com/"
-            className="text-accent underline decoration-line underline-offset-4"
-          >
-            Talk to a counsellor or a local health service
-          </a>
-          <button type="button" onClick={onEdit} className="rounded-full border border-line px-6 py-3">
-            Edit check-in
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadSummary(result)}
-            className="rounded-full border border-line px-6 py-3"
-          >
-            Download summary
-          </button>
+        {/* Navigation & Action Hub */}
+        <div className="mt-10 rounded-[24px] border border-line bg-card p-6 shadow-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Next Actions</h3>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {onNewCheckIn && (
+              <button
+                type="button"
+                onClick={onNewCheckIn}
+                className="flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5"
+              >
+                <Icon name="plus" className="h-4 w-4" />
+                Start a new check-in
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onHistory}
+              className="flex items-center gap-2 rounded-full border border-line bg-paper px-5 py-3 text-sm font-medium text-ink hover:bg-card"
+            >
+              <Icon name="history" className="h-4 w-4 text-accent" />
+              View all history
+            </button>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="rounded-full border border-line bg-card px-5 py-3 text-sm font-medium text-ink hover:bg-paper"
+            >
+              Edit this check-in
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadSummary(result)}
+              className="rounded-full border border-line bg-card px-5 py-3 text-sm font-medium text-ink hover:bg-paper"
+            >
+              Download report (.txt)
+            </button>
+            <button
+              type="button"
+              onClick={onHome}
+              className="rounded-full border border-line px-5 py-3 text-sm text-muted hover:text-ink hover:bg-paper"
+            >
+              Return to Home
+            </button>
+          </div>
+          <div className="mt-4 border-t border-line/60 pt-3">
+            <a
+              href="https://findahelpline.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-accent underline decoration-line underline-offset-4 hover:opacity-80"
+            >
+              Need immediate support? Talk to a counsellor or a 24/7 crisis service →
+            </a>
+          </div>
         </div>
       </div>
     </section>

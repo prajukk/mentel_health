@@ -30,12 +30,15 @@ def _pause_count(silent, minimum_frames):
 
 
 def _pitch_stats(samples, sample_rate):
-    pitch, _, _ = librosa.pyin(
-        samples,
-        fmin=librosa.note_to_hz("C2"),
-        fmax=librosa.note_to_hz("C5"),
-        sr=sample_rate,
-    )
+    try:
+        pitch, _, _ = librosa.pyin(
+            samples,
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C5"),
+            sr=sample_rate,
+        )
+    except Exception:
+        return 0.0, 0.0, 0.0, 0.0
     voiced = pitch[~np.isnan(pitch)]
     if voiced.size == 0:
         return 0.0, 0.0, 0.0, 0.0
@@ -53,11 +56,14 @@ def _pitch_stats(samples, sample_rate):
     return speaking_rate, float(np.mean(voiced)), float(np.ptp(voiced)), jitter
 
 
-def extract_voice(source, sample_rate=16000):
+def extract_voice(source, sample_rate=16000, max_duration=30.0):
     if isinstance(source, (str, Path)):
-        samples, sample_rate = librosa.load(source, sr=sample_rate)
+        samples, sample_rate = librosa.load(source, sr=sample_rate, duration=max_duration)
     else:
         samples = np.asarray(source, dtype=np.float32)
+        max_samples = int(sample_rate * max_duration)
+        if len(samples) > max_samples:
+            samples = samples[:max_samples]
     if samples.size == 0:
         return {name: 0.0 for name in VOICE_FEATURES}
 

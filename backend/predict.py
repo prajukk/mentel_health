@@ -1,6 +1,7 @@
 import json
 from functools import lru_cache
 from pathlib import Path
+import re
 
 import joblib
 import nltk
@@ -16,17 +17,78 @@ from backend.features_voice import extract_voice
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "backend" / "artifacts"
 REPORT_DIR = ROOT / "reports"
+NLTK_DIR = ROOT / "nltk_data"
+if str(NLTK_DIR) not in nltk.data.path:
+    nltk.data.path.insert(0, str(NLTK_DIR))
+
 LOW_THRESHOLD = 0.40
 MODERATE_THRESHOLD = 0.70
+
+CRISIS_PATTERNS = [
+    r"\bkill\s+(my\s*self|me)\b",
+    r"\bcommit\s+suicide\b",
+    r"\bsuicid(e|al)\b",
+    r"\bend\s+my\s+life\b",
+    r"\bwant\s+to\s+die\b",
+    r"\bhurt\s+(my\s*self|me)\b",
+    r"\bbetter\s+off\s+dead\b",
+    r"\bno\s+reason\s+to\s+live\b",
+    r"\btake\s+my\s+own\s+life\b",
+    r"\bself[\s-]harm\b",
+]
+
+CRISIS_HELPLINES = {
+    "india": {"name": "Tele-MANAS", "contact": "14416 / 1800-891-4416", "url": "https://telemanas.mohfw.gov.in"},
+    "us": {"name": "988 Suicide & Crisis Lifeline", "contact": "Call or Text 988", "url": "https://988lifeline.org"},
+    "uk": {"name": "Samaritans", "contact": "116 123", "url": "https://www.samaritans.org"},
+    "international": {"name": "Find A Helpline", "contact": "findahelpline.com", "url": "https://findahelpline.com"},
+}
+
+
+def check_crisis(text):
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(re.search(pattern, lowered) for pattern in CRISIS_PATTERNS)
 
 
 class PredictionInputError(ValueError):
     pass
 
 
+def ensure_artifacts():
+    required = [
+        ARTIFACT_DIR / "tfidf.joblib",
+        ARTIFACT_DIR / "model_text.joblib",
+        ARTIFACT_DIR / "model_behavior.joblib",
+        ARTIFACT_DIR / "model_both.joblib",
+        ARTIFACT_DIR / "feature_names.json",
+    ]
+    if all(p.exists() for p in required):
+        return
+
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    dreaddit_csv = ROOT / "data" / "processed" / "dreaddit.csv"
+    if not dreaddit_csv.exists():
+        from backend.prepare_data import prepare
+        prepare()
+
+    x_all = ROOT / "data" / "processed" / "X_all.npz"
+    if not x_all.exists() or not (ARTIFACT_DIR / "tfidf.joblib").exists():
+        from backend.build_features import main as build_main
+        build_main()
+
+    from backend.train import main as train_main
+    train_main()
+
+
 @lru_cache(maxsize=1)
 def load_resources():
-    nltk.download("vader_lexicon", quiet=True)
+    ensure_artifacts()
+    try:
+        nltk.download("vader_lexicon", quiet=True)
+    except Exception:
+        pass
     names = json.loads((ARTIFACT_DIR / "feature_names.json").read_text(encoding="utf-8"))
     return {
         "analyzer": SentimentIntensityAnalyzer(),
@@ -314,6 +376,7 @@ def predict_risk(
         cleaned = image["writing"]
         image["used_in_score"] = True
     has_text = bool(cleaned)
+    is_crisis = check_crisis(cleaned)
     behavior_values = (hour, karma, upvote_ratio, comment_count)
     has_behavior = all(value is not None for value in behavior_values)
     daily = daily_behavior_report(sleep, energy, company, routine)
@@ -342,6 +405,8 @@ def predict_risk(
     if not has_text and not has_behavior and (daily is not None or photo_level):
         shown = screen_flag(daily, image)
         level = shown["level"]
+        if is_crisis:
+            level = "high"
         notes = list(daily["notes"]) if daily else []
         if image and image.get("appearance_note"):
             notes.append(image["appearance_note"])
@@ -358,6 +423,8 @@ def predict_risk(
             "daily_behavior": daily,
             "screen": shown,
             "cues": [],
+            "crisis_detected": is_crisis,
+            "crisis_helplines": CRISIS_HELPLINES if is_crisis else None,
             "explanation": explain(level, share, [], "", notes or None, voice, image_fact(image)),
             "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},
             "disclaimer": "This is a screening flag, not a clinical diagnosis.",
@@ -366,6 +433,8 @@ def predict_risk(
     pipeline = resources["models"][route]
     probability = positive_probability(pipeline, features)
     level = risk_level(probability)
+    if is_crisis:
+        level = "high"
     cues = top_cues(pipeline, features, resources["names"][route])
     scored_text = cleaned if has_text else ""
     behavior = behavior_report(*behavior_values) if has_behavior else None
@@ -384,6 +453,8 @@ def predict_risk(
         "daily_behavior": daily,
         "screen": shown,
         "cues": cues,
+        "crisis_detected": is_crisis,
+        "crisis_helplines": CRISIS_HELPLINES if is_crisis else None,
         "explanation": explain(
             shown["level"] if shown else level,
             probability,

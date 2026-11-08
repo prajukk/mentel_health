@@ -41,6 +41,9 @@ export default function App() {
   const [historyVersion, setHistoryVersion] = useState(0)
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  const historyList = readHistory()
+  const historyCount = historyList.length
   const openHistory = () => setView("history")
 
   function updateDraft(partial) {
@@ -54,6 +57,17 @@ export default function App() {
   function goHome() {
     setView("welcome")
     setError("")
+  }
+
+  function startNewCheckIn() {
+    setDraft((current) => {
+      if (current.audioUrl) URL.revokeObjectURL(current.audioUrl)
+      if (current.imageUrl) URL.revokeObjectURL(current.imageUrl)
+      return EMPTY_DRAFT
+    })
+    setStep(0)
+    setError("")
+    setView("checkin")
   }
 
   function enter(name) {
@@ -119,12 +133,14 @@ export default function App() {
         onStep={setStep}
         account={account}
         onHome={goHome}
+        onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
         onSignOut={leave}
         onSubmit={submit}
         submitting={submitting}
         error={error}
+        historyCount={historyCount}
       />
     )
   }
@@ -140,9 +156,11 @@ export default function App() {
         }}
         account={account}
         onHome={goHome}
+        onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
         onSignOut={leave}
+        historyCount={historyCount}
       />
     )
   }
@@ -152,9 +170,11 @@ export default function App() {
       <Evaluation
         account={account}
         onHome={goHome}
+        onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
         onSignOut={leave}
+        historyCount={historyCount}
       />
     )
   }
@@ -165,9 +185,16 @@ export default function App() {
         key={historyVersion}
         account={account}
         onHome={goHome}
+        onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
         onSignOut={leave}
+        historyCount={historyCount}
+        onSelectResult={(pastResult) => {
+          setResult(pastResult)
+          setComparison("")
+          setView("result")
+        }}
       />
     )
   }
@@ -175,16 +202,13 @@ export default function App() {
   return (
     <Welcome
       account={account}
-      onStart={() => {
-        setStep(0)
-        setError("")
-        setView("checkin")
-      }}
+      onStart={startNewCheckIn}
       onHome={goHome}
       onHistory={openHistory}
       onEvaluation={() => setView("evaluation")}
       onSignOut={leave}
-      lastCheckIn={readHistory()[0]}
+      lastCheckIn={historyList[0]}
+      historyCount={historyCount}
     />
   )
 }

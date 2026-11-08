@@ -9,10 +9,41 @@ function storageKey() {
   return activeAccount ? `risk-check-history:${activeAccount.toLowerCase()}` : "risk-check-history"
 }
 
+function normalizeHistoryEntry(entry) {
+  if (!entry) return null
+  const fullResult = entry.fullResult || {
+    risk_level: entry.risk_level,
+    probability: entry.probability,
+    inputs_used: entry.inputs_used || [],
+    cues: entry.cues || [],
+    explanation: entry.explanation || null,
+    daily_behavior: entry.daily_behavior || null,
+    voice: entry.voice || null,
+    image: entry.image || null,
+    behavior: entry.behavior || null,
+    screen: entry.screen || null,
+    crisis_detected: !!entry.crisis_detected,
+    disclaimer: "This is a screening flag, not a clinical diagnosis.",
+  }
+  return {
+    ...entry,
+    cues: entry.cues || [],
+    inputs_used: entry.inputs_used || [],
+    explanation: entry.explanation || fullResult.explanation || null,
+    daily_behavior: entry.daily_behavior || fullResult.daily_behavior || null,
+    voice: entry.voice || fullResult.voice || null,
+    image: entry.image || fullResult.image || null,
+    behavior: entry.behavior || fullResult.behavior || null,
+    screen: entry.screen || fullResult.screen || null,
+    crisis_detected: !!entry.crisis_detected || !!fullResult.crisis_detected,
+    fullResult,
+  }
+}
+
 export function readHistory() {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey()) || "[]")
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed) ? parsed.map(normalizeHistoryEntry) : []
   } catch {
     return []
   }
@@ -54,11 +85,66 @@ export function rememberCheckIn(result) {
     probability: shown.probability,
     score_kind: shown.score_kind,
     behavior_points: shown.behavior_points,
-    inputs_used: result.inputs_used,
-    cues: (result.cues || []).slice(0, 5),
+    inputs_used: result.inputs_used || [],
+    cues: result.cues || [],
+    explanation: result.explanation || null,
+    daily_behavior: result.daily_behavior || null,
+    voice: result.voice || null,
+    image: result.image || null,
+    behavior: result.behavior || null,
+    screen: result.screen || null,
+    crisis_detected: !!result.crisis_detected,
+    fullResult: result,
   }
   localStorage.setItem(storageKey(), JSON.stringify([entry, ...previous].slice(0, LIMIT)))
   return previous[0] || null
+}
+
+export function downloadSummary(result, timestamp) {
+  const daily = result.daily_behavior
+  const dateStr = timestamp ? new Date(timestamp).toLocaleString() : new Date().toLocaleString()
+  const headline = result.screen?.level || daily?.level || result.risk_level || "Unknown"
+  const lines = [
+    "==========================================",
+    "       MENTAL HEALTH RISK CHECK REPORT    ",
+    "==========================================",
+    `Date & Time: ${dateStr}`,
+    `Screening Flag: ${headline.toUpperCase()}`,
+    "",
+    "--- MODALITIES EVALUATED ---",
+    `Inputs Used: ${(result.inputs_used || []).join(", ") || "None"}`,
+    daily ? `Daily Behavior: ${daily.level} (${daily.points} / ${daily.out_of} signs concerning)` : "",
+    daily?.notes?.length ? `Behavior Notes: ${daily.notes.join("; ")}` : "",
+    result.inputs_used?.includes("text") ? `Writing Model Probability: ${Number(result.probability).toFixed(4)}` : "",
+    result.voice ? `Voice Acoustic: Pitch ${Math.round(result.voice.pitch_mean || 0)} Hz, Silence ${Math.round((result.voice.pause_ratio || 0) * 100)}%, Pauses ${result.voice.pause_count || 0}` : "",
+    result.voice?.transcript ? `Heard Voice Words: ${result.voice.transcript}` : "",
+    result.image?.appearance ? `Photo Appearance: ${result.image.appearance} - ${result.image.appearance_note || ""}` : "",
+    result.image?.writing ? `Photo Writing Seen: ${result.image.writing}` : "",
+    "",
+    "--- KEY CUES & HIGHLIGHTS ---",
+    `Identified Cues: ${(result.cues || []).join("; ") || "None"}`,
+    result.explanation ? `Summary: ${result.explanation}` : "",
+    "",
+    result.crisis_detected
+      ? "--- CRISIS SUPPORT HELPLINES (24/7) ---\n" +
+        "• India (Tele-MANAS): 14416 / 1800-891-4416\n" +
+        "• US & Canada: 988\n" +
+        "• UK (Samaritans): 116 123\n" +
+        "• International: https://findahelpline.com\n"
+      : "",
+    "--- IMPORTANT DISCLAIMER ---",
+    result.disclaimer || "This is a screening flag, not a clinical diagnosis.",
+    "This check-in is an early risk indicator and NOT a clinical diagnosis.",
+    "If you are feeling overwhelmed, please speak with a healthcare professional or counsellor.",
+    "==========================================",
+  ].filter(Boolean)
+  const blob = new Blob([lines.join("\n")], { type: "text/plain" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `risk-check-${new Date(timestamp || Date.now()).toISOString().slice(0, 10)}.txt`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export function clearHistory() {
