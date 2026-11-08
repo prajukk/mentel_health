@@ -14,6 +14,7 @@ export default function Welcome({
   onHome,
   onHistory,
   onEvaluation,
+  onProfile,
   onSignOut,
   lastCheckIn,
   historyCount = 0,
@@ -27,6 +28,7 @@ export default function Welcome({
         onNewCheckIn={onStart}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
+        onProfile={onProfile}
         onSignOut={onSignOut}
         historyCount={historyCount}
       />

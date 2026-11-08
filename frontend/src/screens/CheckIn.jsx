@@ -72,6 +72,7 @@ export default function CheckIn({
   onHome,
   onHistory,
   onEvaluation,
+  onProfile,
   onSignOut,
   onSubmit,
   submitting,
@@ -301,6 +302,7 @@ export default function CheckIn({
         onNewCheckIn={() => onStep(0)}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
+        onProfile={onProfile}
         onSignOut={onSignOut}
         historyCount={historyCount}
       />

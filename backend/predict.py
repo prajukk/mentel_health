@@ -1,3 +1,4 @@
+import base64
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -9,7 +10,14 @@ import numpy as np
 from nltk.sentiment import SentimentIntensityAnalyzer
 from scipy import sparse
 
-from backend.external_apis import explain, read_appearance, read_writing, transcribe
+from backend.external_apis import (
+    explain,
+    generate_empathic_summary,
+    read_appearance,
+    read_writing,
+    synthesize_speech,
+    transcribe,
+)
 from backend.features_image import extract_image
 from backend.features_text import text_matrix
 from backend.features_voice import extract_voice
@@ -411,6 +419,20 @@ def predict_risk(
         if image and image.get("appearance_note"):
             notes.append(image["appearance_note"])
         share = daily["points"] / daily["out_of"] if daily else {"low": 0.2, "moderate": 0.55, "high": 0.8}[level]
+
+        empathic_summary = generate_empathic_summary(
+            risk_level=level,
+            probability=share,
+            cues=[],
+            excerpt="",
+            daily_behavior=daily,
+            voice=voice,
+            image=image,
+            crisis_detected=is_crisis,
+        )
+        audio_bytes = synthesize_speech(empathic_summary)
+        audio_base64 = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode('ascii')}" if audio_bytes else None
+
         return {
             "risk_level": level,
             "probability": round(share, 4),
@@ -426,6 +448,10 @@ def predict_risk(
             "crisis_detected": is_crisis,
             "crisis_helplines": CRISIS_HELPLINES if is_crisis else None,
             "explanation": explain(level, share, [], "", notes or None, voice, image_fact(image)),
+            "wellness_tip": empathic_summary,
+            "wellness_tip_audio": audio_base64,
+            "empathic_summary": empathic_summary,
+            "empathic_audio_base64": audio_base64,
             "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},
             "disclaimer": "This is a screening flag, not a clinical diagnosis.",
         }
@@ -440,6 +466,19 @@ def predict_risk(
     behavior = behavior_report(*behavior_values) if has_behavior else None
     shown = screen_flag(daily, image)
     notes = list(daily["notes"]) if daily else (behavior["notes"] if behavior else None)
+
+    empathic_summary = generate_empathic_summary(
+        risk_level=shown["level"] if shown else level,
+        probability=probability,
+        cues=cues,
+        excerpt=scored_text,
+        daily_behavior=daily,
+        voice=voice,
+        image=image,
+        crisis_detected=is_crisis,
+    )
+    audio_bytes = synthesize_speech(empathic_summary)
+    audio_base64 = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode('ascii')}" if audio_bytes else None
 
     return {
         "risk_level": level,
@@ -464,6 +503,10 @@ def predict_risk(
             voice,
             image_fact(image),
         ),
+        "wellness_tip": empathic_summary,
+        "wellness_tip_audio": audio_base64,
+        "empathic_summary": empathic_summary,
+        "empathic_audio_base64": audio_base64,
         "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},
         "disclaimer": "This is a screening flag, not a clinical diagnosis.",
     }

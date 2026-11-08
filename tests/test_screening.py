@@ -24,7 +24,7 @@ SAMPLE_WAV = ROOT / "data" / "raw" / "sample_voice.wav"
 def quiet_predict(*args, **kwargs):
     with patch("backend.predict.explain", return_value=None), patch(
         "backend.predict.transcribe", return_value=None
-    ):
+    ), patch("backend.predict.synthesize_speech", return_value=None):
         return predict_risk(*args, **kwargs)
 
 
@@ -331,7 +331,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_predict_does_not_require_external_keys(self):
-        with patch("backend.predict.explain", return_value=None):
+        with patch("backend.predict.explain", return_value=None), patch(
+            "backend.predict.synthesize_speech", return_value=None
+        ):
             response = self.client.post(
                 "/predict",
                 data={"text": JOURNAL, "hour": "23", "karma": "2", "upvote_ratio": "0.8", "comment_count": "1"},

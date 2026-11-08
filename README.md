@@ -270,6 +270,22 @@ Multipart form endpoint supporting:
 - `audio` (UploadFile): WAV/MP3/M4A voice sample (max 15MB).
 - `image` (UploadFile): PNG/JPG photo (max 15MB).
 - `hour`, `karma`, `upvote_ratio`, `comment_count` (optional floats): Social platform metadata.
+Returns risk probability, risk level, extracted cues, personalized AI wellness tip, and base64 Cartesia voice audio.
+
+### `POST /tts`
+Text-to-speech audio synthesis endpoint powered by Cartesia Sonic AI:
+- `text` (JSON or form body): Text string to convert to natural human speech.
+- Returns streaming binary WAV audio (`Content-Type: audio/wav`) using Cartesia's high-fidelity 24kHz model.
+
+---
+
+## User Profile & Safety Configuration
+
+The application features a dedicated client-side profile editor:
+- **Personal Details**: Full name, pronouns, Gmail/email address, phone number.
+- **Emergency Contact**: Name, direct phone number, and relationship.
+- **Privacy by Design**: Stored securely in local browser storage, ensuring personal contact numbers and emails never leave the user's browser.
+- **Personalized Wellness Tip & Voice AI**: Automatically generates an intelligent, actionable daily tip (e.g., listening to favorite music, calling/connecting with friends, mindful pauses, gentle rest) tailored to the user's inputs, narrated immediately via Cartesia Sonic AI with fallback to Web Speech.
 
 ---
 

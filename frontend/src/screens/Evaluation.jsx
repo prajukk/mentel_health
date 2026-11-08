@@ -149,6 +149,7 @@ export default function Evaluation({
   onHome,
   onHistory,
   onEvaluation,
+  onProfile,
   onSignOut,
   onNewCheckIn,
   historyCount = 0,
@@ -179,6 +180,7 @@ export default function Evaluation({
         onNewCheckIn={onNewCheckIn}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
+        onProfile={onProfile}
         onSignOut={onSignOut}
         historyCount={historyCount}
       />

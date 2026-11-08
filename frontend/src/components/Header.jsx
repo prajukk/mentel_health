@@ -7,6 +7,7 @@ export default function Header({
   onNewCheckIn,
   onHistory,
   onEvaluation,
+  onProfile,
   onSignOut,
   historyCount = 0,
 }) {
@@ -102,11 +103,42 @@ export default function Header({
           <Icon name="evaluation" className="h-4 w-4" />
           <span>Evaluation</span>
         </button>
+
+        {onProfile && (
+          <button
+            type="button"
+            onClick={onProfile}
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium sm:text-sm transition-all ${
+              currentView === "profile"
+                ? "bg-accent text-white shadow-sm"
+                : "text-muted hover:bg-paper hover:text-ink"
+            }`}
+            aria-current={currentView === "profile" ? "page" : undefined}
+          >
+            <Icon name="user" className="h-4 w-4" />
+            <span>Profile</span>
+          </button>
+        )}
       </nav>
 
       {/* Account Info and Sign Out */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {account && (
+        {account && onProfile && (
+          <button
+            type="button"
+            onClick={onProfile}
+            title="Edit profile & emergency contacts"
+            className={`hidden items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all border sm:inline-flex ${
+              currentView === "profile"
+                ? "bg-accent text-white border-accent shadow-sm"
+                : "bg-paper text-ink border-line hover:border-accent hover:bg-card"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-low" />
+            <span className="font-semibold">{account}</span>
+          </button>
+        )}
+        {account && !onProfile && (
           <span className="hidden items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-xs font-medium text-ink sm:inline-flex border border-line">
             <span className="h-2 w-2 rounded-full bg-low" />
             {account}

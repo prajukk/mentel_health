@@ -47,6 +47,7 @@ export default function History({
   onHome,
   onEvaluation,
   onHistory,
+  onProfile,
   onSignOut,
   onSelectResult,
   onNewCheckIn,
@@ -74,6 +75,7 @@ export default function History({
         onNewCheckIn={onNewCheckIn}
         onEvaluation={onEvaluation}
         onHistory={onHistory}
+        onProfile={onProfile}
         onSignOut={onSignOut}
         historyCount={entries.length}
       />
@@ -255,6 +257,19 @@ export default function History({
                         <div className="mb-5 rounded-[16px] border border-line bg-card p-4">
                           <p className="text-xs font-semibold uppercase tracking-wider text-muted">Screening Summary</p>
                           <p className="mt-2 text-sm leading-relaxed text-ink italic">"{explanation}"</p>
+                        </div>
+                      )}
+
+                      {/* Personalized Wellness Tip */}
+                      {(entry.wellness_tip || entry.empathic_summary || entry.fullResult?.wellness_tip || entry.fullResult?.empathic_summary) && (
+                        <div className="mb-5 rounded-[16px] border border-accent/30 bg-accent/5 p-4">
+                          <div className="flex items-center gap-2">
+                            <Icon name="sparkle" className="h-4 w-4 text-accent" />
+                            <p className="text-xs font-semibold uppercase tracking-wider text-accent">Today's Wellness Tip</p>
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-ink italic font-display">
+                            "{entry.wellness_tip || entry.empathic_summary || entry.fullResult?.wellness_tip || entry.fullResult?.empathic_summary}"
+                          </p>
                         </div>
                       )}
 

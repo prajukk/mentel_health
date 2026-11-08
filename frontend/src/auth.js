@@ -47,3 +47,44 @@ export async function signIn(name, password) {
 export function signOut() {
   localStorage.removeItem(SESSION_KEY)
 }
+
+export function getProfile(name) {
+  if (!name) return null
+  const accounts = readAccounts()
+  const key = name.trim().toLowerCase()
+  const record = accounts[key] || {}
+  return {
+    name: record.name || name,
+    fullName: record.fullName || "",
+    email: record.email || "",
+    phone: record.phone || "",
+    emergencyContactName: record.emergencyContactName || "",
+    emergencyContactPhone: record.emergencyContactPhone || "",
+    emergencyContactRelation: record.emergencyContactRelation || "",
+    pronouns: record.pronouns || "",
+    notes: record.notes || "",
+  }
+}
+
+export function saveProfile(name, data) {
+  if (!name) throw new Error("No active session to update profile.")
+  const accounts = readAccounts()
+  const key = name.trim().toLowerCase()
+  if (!accounts[key]) {
+    accounts[key] = { name }
+  }
+  accounts[key] = {
+    ...accounts[key],
+    fullName: (data.fullName ?? accounts[key].fullName ?? "").trim(),
+    email: (data.email ?? accounts[key].email ?? "").trim(),
+    phone: (data.phone ?? accounts[key].phone ?? "").trim(),
+    emergencyContactName: (data.emergencyContactName ?? accounts[key].emergencyContactName ?? "").trim(),
+    emergencyContactPhone: (data.emergencyContactPhone ?? accounts[key].emergencyContactPhone ?? "").trim(),
+    emergencyContactRelation: (data.emergencyContactRelation ?? accounts[key].emergencyContactRelation ?? "").trim(),
+    pronouns: (data.pronouns ?? accounts[key].pronouns ?? "").trim(),
+    notes: (data.notes ?? accounts[key].notes ?? "").trim(),
+  }
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
+  return getProfile(name)
+}
+

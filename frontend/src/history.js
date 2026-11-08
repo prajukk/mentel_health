@@ -17,6 +17,10 @@ function normalizeHistoryEntry(entry) {
     inputs_used: entry.inputs_used || [],
     cues: entry.cues || [],
     explanation: entry.explanation || null,
+    wellness_tip: entry.wellness_tip || entry.empathic_summary || null,
+    wellness_tip_audio: entry.wellness_tip_audio || entry.empathic_audio_base64 || null,
+    empathic_summary: entry.empathic_summary || entry.wellness_tip || null,
+    empathic_audio_base64: entry.empathic_audio_base64 || entry.wellness_tip_audio || null,
     daily_behavior: entry.daily_behavior || null,
     voice: entry.voice || null,
     image: entry.image || null,
@@ -30,6 +34,10 @@ function normalizeHistoryEntry(entry) {
     cues: entry.cues || [],
     inputs_used: entry.inputs_used || [],
     explanation: entry.explanation || fullResult.explanation || null,
+    wellness_tip: entry.wellness_tip || fullResult.wellness_tip || entry.empathic_summary || null,
+    wellness_tip_audio: entry.wellness_tip_audio || fullResult.wellness_tip_audio || entry.empathic_audio_base64 || null,
+    empathic_summary: entry.empathic_summary || fullResult.empathic_summary || null,
+    empathic_audio_base64: entry.empathic_audio_base64 || fullResult.empathic_audio_base64 || null,
     daily_behavior: entry.daily_behavior || fullResult.daily_behavior || null,
     voice: entry.voice || fullResult.voice || null,
     image: entry.image || fullResult.image || null,
@@ -88,6 +96,10 @@ export function rememberCheckIn(result) {
     inputs_used: result.inputs_used || [],
     cues: result.cues || [],
     explanation: result.explanation || null,
+    wellness_tip: result.wellness_tip || result.empathic_summary || null,
+    wellness_tip_audio: result.wellness_tip_audio || result.empathic_audio_base64 || null,
+    empathic_summary: result.empathic_summary || result.wellness_tip || null,
+    empathic_audio_base64: result.empathic_audio_base64 || result.wellness_tip_audio || null,
     daily_behavior: result.daily_behavior || null,
     voice: result.voice || null,
     image: result.image || null,
@@ -111,6 +123,9 @@ export function downloadSummary(result, timestamp) {
     `Date & Time: ${dateStr}`,
     `Screening Flag: ${headline.toUpperCase()}`,
     "",
+    (result.wellness_tip || result.empathic_summary)
+      ? `--- PERSONALIZED WELLNESS TIP ---\n${result.wellness_tip || result.empathic_summary}\n`
+      : "",
     "--- MODALITIES EVALUATED ---",
     `Inputs Used: ${(result.inputs_used || []).join(", ") || "None"}`,
     daily ? `Daily Behavior: ${daily.level} (${daily.points} / ${daily.out_of} signs concerning)` : "",
@@ -127,10 +142,10 @@ export function downloadSummary(result, timestamp) {
     "",
     result.crisis_detected
       ? "--- CRISIS SUPPORT HELPLINES (24/7) ---\n" +
-        "• India (Tele-MANAS): 14416 / 1800-891-4416\n" +
-        "• US & Canada: 988\n" +
-        "• UK (Samaritans): 116 123\n" +
-        "• International: https://findahelpline.com\n"
+      "• India (Tele-MANAS): 14416 / 1800-891-4416\n" +
+      "• US & Canada: 988\n" +
+      "• UK (Samaritans): 116 123\n" +
+      "• International: https://findahelpline.com\n"
       : "",
     "--- IMPORTANT DISCLAIMER ---",
     result.disclaimer || "This is a screening flag, not a clinical diagnosis.",

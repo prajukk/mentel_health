@@ -29,3 +29,20 @@ export async function loadMetrics() {
   if (!response.ok) throw new Error("Evaluation results are unavailable.")
   return response.json()
 }
+
+export async function synthesizeVoice(text) {
+  if (!text || !text.trim()) return null
+  try {
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+    if (!response.ok) return null
+    const blob = await response.blob()
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+

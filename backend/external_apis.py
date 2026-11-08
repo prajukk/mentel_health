@@ -179,3 +179,148 @@ def explain(risk_level, probability, cues, excerpt, behavior_notes=None, voice=N
         return GEMINI_POOL.run(call)
     except (requests.RequestException, KeyError, IndexError):
         return None
+
+
+CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes"
+
+
+def synthesize_speech(text):
+    if not text or not CARTESIA_POOL:
+        return None
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    if len(cleaned) > 500:
+        cleaned = cleaned[:500] + "..."
+
+    def call(api_key):
+        version = os.getenv("CARTESIA_VERSION", "2024-06-10")
+        response = requests.post(
+            CARTESIA_TTS_URL,
+            headers={
+                "X-API-Key": api_key,
+                "Cartesia-Version": version,
+                "Content-Type": "application/json",
+            },
+            json={
+                "model_id": "sonic-3.6",
+                "transcript": cleaned,
+                "voice": {
+                    "mode": "id",
+                    "id": "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4",
+                },
+                "output_format": {
+                    "container": "wav",
+                    "encoding": "pcm_s16le",
+                    "sample_rate": 24000,
+                },
+            },
+            timeout=15,
+        )
+        checked = _checked_response(response)
+        return checked.content
+
+    try:
+        return CARTESIA_POOL.run(call)
+    except Exception:
+        return None
+
+
+def generate_wellness_tip(
+    risk_level,
+    probability,
+    cues=None,
+    excerpt=None,
+    daily_behavior=None,
+    voice=None,
+    image=None,
+    crisis_detected=False,
+):
+    if crisis_detected:
+        return (
+            "Here is your most important tip for right now: please know you are not alone, and you do not have to carry this heavy burden by yourself. "
+            "Take a slow, deep breath, put on some calming music, and reach out to someone you trust or a free 24/7 crisis helpline immediately. "
+            "Help and caring support are always here for you."
+        )
+
+    answers = daily_behavior.get("answers", {}) if daily_behavior else {}
+    sleep = answers.get("sleep", "")
+    energy = answers.get("energy", "")
+    company = answers.get("company", "")
+    routine = answers.get("routine", "")
+    safe_writing = excerpt.strip().replace("\n", " ")[:350] if excerpt else "No writing was provided."
+    cues_str = "; ".join(cues) if cues else "natural expressions"
+
+    # Attempt with Gemini AI first
+    if GEMINI_POOL:
+        prompt = (
+            "You are a warm, wise, and uplifting daily wellness companion. Write 2 to 3 comforting, intelligent sentences "
+            "giving the user a personalized wellness tip for today. "
+            "Include nice, actionable suggestions such as listening to their favorite music, talking or connecting with friends, "
+            "taking a mindful breather, or enjoying a restorative pause, tailored intelligently to how their day went. "
+            "Speak directly to the user ('you'). Keep the tone supportive, gentle, and conversational for voice narration. "
+            "Do NOT diagnose or name clinical disorders.\n"
+            f"Screening indicator: {risk_level} (score {probability:.2f}). "
+            f"Sleep: {sleep}. Energy: {energy}. Social: {company}. Routine: {routine}. "
+            f"Journal thoughts: {safe_writing}. Cues: {cues_str}."
+        )
+
+        def call(api_key):
+            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            response = requests.post(
+                GEMINI_URL.format(model=model),
+                headers={"x-goog-api-key": api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": 220},
+                },
+                timeout=15,
+            )
+            payload = _checked_response(response).json()
+            parts = payload["candidates"][0]["content"]["parts"]
+            return "".join(part.get("text", "") for part in parts).strip()
+
+        try:
+            tip = GEMINI_POOL.run(call)
+            if tip and len(tip) > 25:
+                return tip
+        except Exception:
+            pass
+
+    # High-intelligence personalized fallback tips tailored to user's specific answers
+    if risk_level == "low":
+        if company in ("no", "little"):
+            return (
+                "Here is your wellness tip for today: Your day has a steady rhythm, making it a wonderful time to connect with others. "
+                "Put on your favorite feel-good music, text or call a friend you have been meaning to catch up with, "
+                "and take a mindful moment to celebrate how grounded you are feeling."
+            )
+        else:
+            return (
+                "Here is your wellness tip for today: You are maintaining a wonderful, healthy balance. "
+                "Take a few minutes to unwind with some uplifting music, share a laugh with friends or loved ones, "
+                "and enjoy the positive momentum you have built today."
+            )
+    elif risk_level == "moderate":
+        if energy in ("low", "very_low") or sleep in ("poor", "short", "none"):
+            return (
+                "Here is your wellness tip for today: Your body and mind are asking for gentle restoration. "
+                "Put on a playlist of soft, calming music, pour a warm drink, and take a 15-minute screen-free break. "
+                "Consider calling or messaging a close friend for a light chat—a little connection can work wonders when energy is low."
+            )
+        else:
+            return (
+                "Here is your wellness tip for today: When life feels a bit demanding, small pauses make all the difference. "
+                "Listen to music that brings you peace, step outside for five minutes of fresh air, "
+                "and reach out to a trusted friend to chat. You do not have to carry today's tasks all at once."
+            )
+    else:  # high
+        return (
+            "Here is your wellness tip for today: You are navigating a lot right now, so please give yourself full permission to slow down. "
+            "Put on some soothing, gentle music, wrap yourself in comfort, and connect with a close friend or family member who truly listens. "
+            "Sharing how you feel with someone you trust will help lighten this load, and remember that help is always here for you."
+        )
+
+
+# Backward-compatible alias
+generate_empathic_summary = generate_wellness_tip
+
+

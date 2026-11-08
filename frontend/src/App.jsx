@@ -6,6 +6,7 @@ import CheckIn from "./screens/CheckIn.jsx"
 import Evaluation from "./screens/Evaluation.jsx"
 import History from "./screens/History.jsx"
 import Login from "./screens/Login.jsx"
+import Profile from "./screens/Profile.jsx"
 import Result from "./screens/Result.jsx"
 import Welcome from "./screens/Welcome.jsx"
 
@@ -45,6 +46,7 @@ export default function App() {
   const historyList = readHistory()
   const historyCount = historyList.length
   const openHistory = () => setView("history")
+  const openProfile = () => setView("profile")
 
   function updateDraft(partial) {
     setDraft((current) => {
@@ -136,6 +138,7 @@ export default function App() {
         onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
+        onProfile={openProfile}
         onSignOut={leave}
         onSubmit={submit}
         submitting={submitting}
@@ -159,6 +162,7 @@ export default function App() {
         onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
+        onProfile={openProfile}
         onSignOut={leave}
         historyCount={historyCount}
       />
@@ -173,6 +177,7 @@ export default function App() {
         onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
+        onProfile={openProfile}
         onSignOut={leave}
         historyCount={historyCount}
       />
@@ -188,6 +193,7 @@ export default function App() {
         onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={() => setView("evaluation")}
+        onProfile={openProfile}
         onSignOut={leave}
         historyCount={historyCount}
         onSelectResult={(pastResult) => {
@@ -199,6 +205,21 @@ export default function App() {
     )
   }
 
+  if (view === "profile") {
+    return (
+      <Profile
+        account={account}
+        onHome={goHome}
+        onNewCheckIn={startNewCheckIn}
+        onHistory={openHistory}
+        onEvaluation={() => setView("evaluation")}
+        onProfile={openProfile}
+        onSignOut={leave}
+        historyCount={historyCount}
+      />
+    )
+  }
+
   return (
     <Welcome
       account={account}
@@ -206,6 +227,7 @@ export default function App() {
       onHome={goHome}
       onHistory={openHistory}
       onEvaluation={() => setView("evaluation")}
+      onProfile={openProfile}
       onSignOut={leave}
       lastCheckIn={historyList[0]}
       historyCount={historyCount}

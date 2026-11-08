@@ -1,10 +1,10 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.external_apis import CARTESIA_POOL, GEMINI_POOL
+from backend.external_apis import CARTESIA_POOL, GEMINI_POOL, synthesize_speech
 from backend.predict import PredictionInputError, load_metrics, predict_risk
 
 app = FastAPI(title="Mental Health Risk Check")
@@ -31,6 +31,24 @@ def health():
 @app.get("/metrics")
 def metrics():
     return load_metrics()
+
+
+@app.post("/tts")
+async def tts(request: Request, text: str = Form(None)):
+    tts_text = text
+    if not tts_text:
+        try:
+            body = await request.json()
+            tts_text = body.get("text", "")
+        except Exception:
+            pass
+    if not tts_text or not tts_text.strip():
+        raise HTTPException(status_code=400, detail="Text is required for speech synthesis.")
+    audio_bytes = synthesize_speech(tts_text)
+    if not audio_bytes:
+        raise HTTPException(status_code=503, detail="Voice synthesis is currently unavailable.")
+    return Response(content=audio_bytes, media_type="audio/wav")
+
 
 
 def kept_suffix(filename, allowed, fallback):
