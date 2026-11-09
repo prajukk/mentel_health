@@ -1,6 +1,17 @@
-function messageFrom(payload) {
+function messageFrom(payload, fallback = "The check-in could not be scored.") {
   if (typeof payload?.detail === "string") return payload.detail
-  return "The check-in could not be scored."
+  if (Array.isArray(payload?.detail) && payload.detail[0]?.msg) return payload.detail[0].msg
+  return fallback
+}
+
+async function readJson(response) {
+  const raw = await response.text()
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
 }
 
 export async function predict(draft) {
@@ -19,15 +30,18 @@ export async function predict(draft) {
     body.append("image", draft.imageFile, draft.imageFile.name || "check-in.png")
   }
   const response = await fetch("/api/predict", { method: "POST", body })
-  const payload = await response.json()
+  const payload = await readJson(response)
   if (!response.ok) throw new Error(messageFrom(payload))
+  if (!payload) throw new Error("The server returned an empty response.")
   return payload
 }
 
 export async function loadMetrics() {
   const response = await fetch("/api/metrics")
   if (!response.ok) throw new Error("Evaluation results are unavailable.")
-  return response.json()
+  const payload = await readJson(response)
+  if (!payload) throw new Error("Evaluation results are unavailable.")
+  return payload
 }
 
 export async function synthesizeVoice(text) {
@@ -45,4 +59,3 @@ export async function synthesizeVoice(text) {
     return null
   }
 }
-

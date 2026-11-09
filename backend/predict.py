@@ -1,4 +1,3 @@
-import base64
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -11,11 +10,10 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 from scipy import sparse
 
 from backend.external_apis import (
+    compose_wellness_with_cartesia,
     explain,
-    generate_empathic_summary,
     read_appearance,
     read_writing,
-    synthesize_speech,
     transcribe,
 )
 from backend.features_image import extract_image
@@ -322,9 +320,20 @@ def image_summary(image_path):
     summary = extract_image(image_path)
     summary["writing"] = read_writing(image_path)
     look = read_appearance(image_path)
-    summary["appearance"] = look["appearance"] if look else None
-    summary["appearance_note"] = look["note"] if look else None
-    summary["appearance_level"] = look["level"] if look else None
+    if look:
+        summary["appearance"] = look["appearance"]
+        summary["appearance_note"] = look["note"]
+        summary["appearance_level"] = look["level"]
+        summary["appearance_source"] = "gemini"
+    else:
+        # Gemini unavailable (billing/keys/network). Still keep local image facts.
+        summary["appearance"] = "unclear"
+        summary["appearance_note"] = (
+            "Photo was saved, but face-look analysis is temporarily unavailable. "
+            "Try again later, or continue with journal and behavior answers."
+        )
+        summary["appearance_level"] = None
+        summary["appearance_source"] = "unavailable"
     summary["used_in_score"] = False
     return summary
 
@@ -340,17 +349,54 @@ def image_fact(image):
     return " ".join(parts) or None
 
 
-def screen_flag(daily, image):
-    look = image.get("appearance_level") if image else None
-    rank = {"low": 0, "moderate": 1, "high": 2}
-    if daily and look:
-        level = daily["level"] if rank[daily["level"]] >= rank[look] else look
-        return {"level": level, "source": "both"}
-    if daily:
-        return {"level": daily["level"], "source": "behavior"}
-    if look:
-        return {"level": look, "source": "photo"}
+def voice_screen_level(voice):
+    """Map acoustic cues to a soft screening band (raises only; calm voice returns None)."""
+    if not voice:
+        return None
+    pause = float(voice.get("pause_ratio") or 0)
+    pauses = int(voice.get("pause_count") or 0)
+    jitter = float(voice.get("jitter") or 0)
+    # Longer silence / fragmented speech can accompany strain or withdrawal.
+    if pause >= 0.65 or (pause >= 0.5 and pauses >= 4) or (pause >= 0.45 and jitter >= 0.05):
+        return "high"
+    if pause >= 0.4 or pauses >= 3 or jitter >= 0.035:
+        return "moderate"
     return None
+
+
+def screen_flag(daily, image, writing_level=None, voice_level=None):
+    """Shown flag = highest of behavior, writing, voice acoustics, and photo look."""
+    rank = {"low": 0, "moderate": 1, "high": 2}
+    parts = []
+    if daily:
+        parts.append(("behavior", daily["level"]))
+    look = image.get("appearance_level") if image else None
+    if look in rank:
+        parts.append(("photo", look))
+    if writing_level in rank:
+        parts.append(("writing", writing_level))
+    if voice_level in rank:
+        parts.append(("voice", voice_level))
+    if not parts:
+        return None
+
+    best_level = max(parts, key=lambda item: rank[item[1]])[1]
+    winners = [name for name, level in parts if rank[level] == rank[best_level]]
+    order = ["behavior", "writing", "voice", "photo"]
+    winners = sorted(winners, key=lambda name: order.index(name) if name in order else 99)
+
+    if winners == ["behavior", "photo"]:
+        source = "both"
+    elif len(winners) == 1:
+        source = winners[0]
+    else:
+        source = "_and_".join(winners)
+
+    return {
+        "level": best_level,
+        "source": source,
+        "parts": {name: level for name, level in parts},
+    }
 
 
 def predict_risk(
@@ -389,8 +435,11 @@ def predict_risk(
     has_behavior = all(value is not None for value in behavior_values)
     daily = daily_behavior_report(sleep, energy, company, routine)
     photo_level = image.get("appearance_level") if image else None
-    if not has_text and not has_behavior and daily is None and not photo_level:
-        raise PredictionInputError("Provide journal text, the behavior answers, or a photo of a person.")
+    acoustic_level = voice_screen_level(voice)
+    if not has_text and not has_behavior and daily is None and not photo_level and acoustic_level is None:
+        raise PredictionInputError(
+            "Provide journal text, the behavior answers, a voice recording, or a photo of a person."
+        )
 
     text_features = None
     if has_text:
@@ -410,17 +459,24 @@ def predict_risk(
         features = behavior_features
         used = ["behavior"]
 
-    if not has_text and not has_behavior and (daily is not None or photo_level):
-        shown = screen_flag(daily, image)
+    if not has_text and not has_behavior and (daily is not None or photo_level or acoustic_level):
+        shown = screen_flag(daily, image, writing_level=None, voice_level=acoustic_level)
         level = shown["level"]
         if is_crisis:
             level = "high"
+            shown = {**shown, "level": "high"}
         notes = list(daily["notes"]) if daily else []
         if image and image.get("appearance_note"):
             notes.append(image["appearance_note"])
+        if voice and acoustic_level:
+            notes.append(
+                f"Voice cues suggested {acoustic_level} strain "
+                f"(silence {round(float(voice.get('pause_ratio') or 0) * 100)}%, "
+                f"{int(voice.get('pause_count') or 0)} pauses)."
+            )
         share = daily["points"] / daily["out_of"] if daily else {"low": 0.2, "moderate": 0.55, "high": 0.8}[level]
 
-        empathic_summary = generate_empathic_summary(
+        wellness = compose_wellness_with_cartesia(
             risk_level=level,
             probability=share,
             cues=[],
@@ -430,14 +486,23 @@ def predict_risk(
             image=image,
             crisis_detected=is_crisis,
         )
-        audio_bytes = synthesize_speech(empathic_summary)
-        audio_base64 = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode('ascii')}" if audio_bytes else None
+        empathic_summary = wellness["text"]
+        audio_base64 = wellness["audio_base64"]
+
+        used_inputs = []
+        if daily:
+            used_inputs.append("behavior")
+        if voice is not None:
+            used_inputs.append("voice")
+        if image and (photo_level or image.get("writing") or image.get("appearance")):
+            used_inputs.append("image")
+        missing_inputs = [] if voice is not None else ["voice"]
 
         return {
             "risk_level": level,
             "probability": round(share, 4),
-            "inputs_used": ["behavior"] if daily else ["image"],
-            "inputs_missing": [] if text_from_voice else ["voice"],
+            "inputs_used": used_inputs or (["image"] if image else ["behavior"]),
+            "inputs_missing": missing_inputs,
             "voice_recorded": voice is not None,
             "voice": voice,
             "image": image,
@@ -450,6 +515,8 @@ def predict_risk(
             "explanation": explain(level, share, [], "", notes or None, voice, image_fact(image)),
             "wellness_tip": empathic_summary,
             "wellness_tip_audio": audio_base64,
+            "wellness_tip_source": wellness["tip_source"],
+            "wellness_voice_provider": wellness["voice_provider"],
             "empathic_summary": empathic_summary,
             "empathic_audio_base64": audio_base64,
             "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},
@@ -464,11 +531,22 @@ def predict_risk(
     cues = top_cues(pipeline, features, resources["names"][route])
     scored_text = cleaned if has_text else ""
     behavior = behavior_report(*behavior_values) if has_behavior else None
-    shown = screen_flag(daily, image)
+    # Combine behavior + writing + voice + photo; take the highest band.
+    shown = screen_flag(
+        daily,
+        image,
+        writing_level=level if has_text else None,
+        voice_level=acoustic_level,
+    )
     notes = list(daily["notes"]) if daily else (behavior["notes"] if behavior else None)
+    shown_level = shown["level"] if shown else level
+    if is_crisis:
+        shown_level = "high"
+        if shown:
+            shown = {**shown, "level": "high"}
 
-    empathic_summary = generate_empathic_summary(
-        risk_level=shown["level"] if shown else level,
+    wellness = compose_wellness_with_cartesia(
+        risk_level=shown_level,
         probability=probability,
         cues=cues,
         excerpt=scored_text,
@@ -477,14 +555,16 @@ def predict_risk(
         image=image,
         crisis_detected=is_crisis,
     )
-    audio_bytes = synthesize_speech(empathic_summary)
-    audio_base64 = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode('ascii')}" if audio_bytes else None
+    empathic_summary = wellness["text"]
+    audio_base64 = wellness["audio_base64"]
+
+    missing_inputs = [] if voice is not None else ["voice"]
 
     return {
         "risk_level": level,
         "probability": round(probability, 4),
         "inputs_used": used,
-        "inputs_missing": [] if text_from_voice else ["voice"],
+        "inputs_missing": missing_inputs,
         "voice_recorded": voice is not None,
         "voice": voice,
         "image": image,
@@ -505,6 +585,8 @@ def predict_risk(
         ),
         "wellness_tip": empathic_summary,
         "wellness_tip_audio": audio_base64,
+        "wellness_tip_source": wellness["tip_source"],
+        "wellness_voice_provider": wellness["voice_provider"],
         "empathic_summary": empathic_summary,
         "empathic_audio_base64": audio_base64,
         "thresholds": {"low_below": LOW_THRESHOLD, "high_above": MODERATE_THRESHOLD},

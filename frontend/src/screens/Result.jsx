@@ -12,20 +12,21 @@ const NEXT_STEP = {
 
 function downloadSummary(result) {
   const daily = result.daily_behavior
+  const used = result.inputs_used || []
   const dateStr = new Date().toLocaleString()
   const lines = [
     "==========================================",
     "       MENTAL HEALTH RISK CHECK REPORT    ",
     "==========================================",
     `Date & Time: ${dateStr}`,
-    `Screening Flag: ${result.screen?.level || daily?.level || result.risk_level}`.toUpperCase(),
+    `Screening Flag: ${(result.screen?.level || daily?.level || result.risk_level || "unknown")}`.toUpperCase(),
     "",
     "--- MODALITIES EVALUATED ---",
-    `Inputs Used: ${result.inputs_used.join(", ")}`,
+    `Inputs Used: ${used.join(", ") || "None"}`,
     daily ? `Daily Behavior: ${daily.level} (${daily.points} / ${daily.out_of} signs concerning)` : "",
-    daily ? `Behavior Notes: ${daily.notes.join("; ")}` : "",
-    result.inputs_used.includes("text") ? `Writing Model Probability: ${Number(result.probability).toFixed(4)}` : "",
-    result.voice ? `Voice Acoustic: Pitch ${Math.round(result.voice.pitch_mean)} Hz, Silence ${Math.round(result.voice.pause_ratio * 100)}%, Pauses ${result.voice.pause_count}` : "",
+    daily?.notes?.length ? `Behavior Notes: ${daily.notes.join("; ")}` : "",
+    used.includes("text") ? `Writing Model Probability: ${Number(result.probability ?? 0).toFixed(4)}` : "",
+    result.voice ? `Voice Acoustic: Pitch ${Math.round(result.voice.pitch_mean || 0)} Hz, Silence ${Math.round((result.voice.pause_ratio || 0) * 100)}%, Pauses ${result.voice.pause_count || 0}` : "",
     result.image?.appearance ? `Photo Appearance: ${result.image.appearance} - ${result.image.appearance_note || ""}` : "",
     "",
     "--- KEY CUES & HIGHLIGHTS ---",
@@ -43,7 +44,7 @@ function downloadSummary(result) {
       "• International: https://findahelpline.com\n"
       : "",
     "--- IMPORTANT DISCLAIMER ---",
-    result.disclaimer,
+    result.disclaimer || "This is a screening flag, not a clinical diagnosis.",
     "This check-in is an early risk indicator and NOT a clinical diagnosis.",
     "If you are feeling overwhelmed, please speak with a healthcare professional or counsellor.",
     "==========================================",
@@ -107,7 +108,7 @@ function shownShare(result, headline) {
   if (!result.screen) return Number(result.probability) || 0
   if (headline === "low") return 0.2
   if (headline === "moderate") return 0.55
-  return 0.85
+  return 0.8
 }
 
 function behaviorRows(daily) {
@@ -165,27 +166,33 @@ function scoreLabel(score) {
   return `${score.risk_level}, ${Number(score.probability).toFixed(2)}`
 }
 
-function checkedLine(result) {
-  if (result.screen?.source === "both") {
-    return "This follows the behavior answers and the look in the photo."
+function tipActions(result, headline) {
+  const answers = result.daily_behavior?.answers || {}
+  const actions = []
+  if (answers.sleep === "short" || answers.sleep === "poor" || answers.sleep === "none" || answers.energy === "low" || answers.energy === "very_low") {
+    actions.push({ icon: "feel", label: "Rest body for 10–15 min" })
   }
-  if (result.screen?.source === "photo") {
-    return "This follows the look Gemini read in the photo."
+  if (answers.company === "no" || answers.company === "little" || headline === "high") {
+    actions.push({ icon: "phone", label: "Message one safe person" })
   }
-  if (result.daily_behavior || result.screen?.source === "behavior") {
-    return "This follows sleep, energy, time with other people, and whether the usual routine was kept."
+  if (answers.routine === "partly" || answers.routine === "no") {
+    actions.push({ icon: "check", label: "Do one tiny routine step" })
   }
-  const writing = result.inputs_used.includes("text")
-  const behavior = result.inputs_used.includes("behavior")
-  if (writing && behavior) return "The number comes from your writing and the saved routine features."
-  if (writing) return "The number comes from your writing only. Behavior was left out."
-  return "The number comes from the saved routine features. No writing was scored."
+  actions.push({ icon: "music", label: "Play calm music" })
+  actions.push({ icon: "feel", label: "Take 5 slow breaths" })
+  const seen = new Set()
+  return actions.filter((item) => {
+    if (seen.has(item.label)) return false
+    seen.add(item.label)
+    return true
+  }).slice(0, 3)
 }
 
 export default function Result({
   result,
   comparison,
   account,
+  canEdit = true,
   onEdit,
   onHome,
   onHistory,
@@ -196,12 +203,15 @@ export default function Result({
   historyCount = 0,
 }) {
   const daily = result.daily_behavior
-  const headline = result.screen?.level || daily?.level || result.risk_level
-  const writingCues = result.inputs_used.includes("text")
-    ? result.cues.filter((cue) => !isRoutineCue(cue) && !isWeakWritingCue(cue))
+  const inputsUsed = result.inputs_used || []
+  const cues = result.cues || []
+  const headline = result.screen?.level || daily?.level || result.risk_level || "unknown"
+  const resetActions = tipActions(result, headline)
+  const writingCues = inputsUsed.includes("text")
+    ? cues.filter((cue) => !isRoutineCue(cue) && !isWeakWritingCue(cue))
     : null
-  const language = writingCues && writingCues.length ? writingCues : result.inputs_used.includes("text")
-    ? result.cues.filter((cue) => !isRoutineCue(cue))
+  const language = writingCues && writingCues.length ? writingCues : inputsUsed.includes("text")
+    ? cues.filter((cue) => !isRoutineCue(cue))
     : null
   const behaviorNotes = daily?.notes || result.behavior?.notes || null
   const share = shownShare(result, headline)
@@ -347,13 +357,18 @@ export default function Result({
   // If audio wasn't generated by backend, fetch from /api/tts asynchronously
   useEffect(() => {
     let isMounted = true
+    let fetchedUrl = null
     if (!voiceAudioUrl && !result.wellness_tip_audio && !result.empathic_audio_base64 && tipText) {
       setIsSynthesizing(true)
       synthesizeVoice(tipText)
         .then((url) => {
-          if (!isMounted) return
+          if (!isMounted) {
+            if (url) URL.revokeObjectURL(url)
+            return
+          }
           setIsSynthesizing(false)
           if (url) {
+            fetchedUrl = url
             setVoiceAudioUrl(url)
           }
         })
@@ -363,6 +378,7 @@ export default function Result({
     }
     return () => {
       isMounted = false
+      if (fetchedUrl) URL.revokeObjectURL(fetchedUrl)
     }
   }, [voiceAudioUrl, tipText])
 
@@ -517,27 +533,43 @@ export default function Result({
           </p>
           {daily && (
             <p className="mt-4 text-lg text-ink">
-              {daily.points} of {daily.out_of} behavior signs were concerning.
+              {daily.points} of {daily.out_of} behavior signs were concerning
+              {daily.level !== headline ? ` (behavior alone: ${daily.level})` : ""}.
             </p>
           )}
+          {result.screen?.parts && (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              {Object.entries(result.screen.parts).map(([name, level]) => (
+                <span
+                  key={name}
+                  className={`rounded-full border px-3 py-1 capitalize ${
+                    level === headline
+                      ? "border-accent/40 bg-accent/10 text-accent"
+                      : "border-line bg-paper text-muted"
+                  }`}
+                >
+                  {name}: {level}
+                </span>
+              ))}
+            </div>
+          )}
+          {result.screen?.parts &&
+            Object.keys(result.screen.parts).length > 1 &&
+            Object.entries(result.screen.parts).some(
+              ([name, level]) => name !== "behavior" && level === headline && daily?.level !== headline,
+            ) && (
+              <p className="mt-2 max-w-xl text-sm text-muted">
+                Combined from behavior, writing, voice, and photo — the highest band is shown.
+              </p>
+            )}
           {result.image?.appearance && result.image.appearance !== "unclear" && (
             <p className={`${daily ? "mt-2" : "mt-4"} text-lg text-ink`}>
               The photo looks {result.image.appearance}.
             </p>
           )}
           {!daily && result.screen?.source !== "photo" && (
-            <p className="mt-4 text-lg text-ink">Probability {result.probability.toFixed(2)}</p>
-          )}
-          <p className="mt-2 max-w-xl text-muted">{checkedLine(result)}</p>
-          {daily && result.inputs_used.includes("text") && (
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted">
-              The writing model read the journal as {result.risk_level}, {result.probability.toFixed(2)}. That
-              number is from the words. The result above follows the behavior answers.
-            </p>
-          )}
-          {!daily && (
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted">
-              Under 0.40 is low. From 0.40 to 0.70 is moderate. Above 0.70 is high.
+            <p className="mt-4 text-lg text-ink">
+              Probability {Number(result.probability ?? 0).toFixed(2)}
             </p>
           )}
           {comparison?.before && (
@@ -556,8 +588,6 @@ export default function Result({
               </p>
             </div>
           )}
-          {comparison && !comparison.before && <p className="mt-4 text-sm text-muted">{comparison.sentence}</p>}
-          <p className="mt-4 max-w-xl text-muted">{result.disclaimer}</p>
           {result.explanation && (
             <p className="mt-4 max-w-xl leading-relaxed text-ink">{result.explanation}</p>
           )}
@@ -583,8 +613,17 @@ export default function Result({
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-card px-3 py-1 text-xs font-medium text-accent shadow-2xs">
                 <Icon name="volume" className="h-3.5 w-3.5" />
-                <span>Cartesia Sonic Voice</span>
+                <span>
+                  {result.wellness_voice_provider === "cartesia" || result.wellness_tip_audio || result.empathic_audio_base64
+                    ? "Cartesia Sonic Voice"
+                    : "Voice tip ready"}
+                </span>
               </span>
+              {result.wellness_tip_source === "fallback" && (
+                <span className="inline-flex items-center rounded-full border border-line bg-paper px-3 py-1 text-[10px] font-medium text-muted">
+                  Gemini offline · tip via care fallback
+                </span>
+              )}
             </div>
           </div>
 
@@ -685,21 +724,18 @@ export default function Result({
             </div>
           </div>
 
-          {/* Quick Supportive Action Reminders */}
+          {/* Behavior-matched micro-actions */}
           <div className="mt-4 flex flex-wrap items-center gap-2 pt-2 border-t border-line/40 text-xs text-muted">
             <span className="font-semibold text-ink text-[11px] uppercase tracking-wider">Helpful ways to reset:</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-ink border border-line">
-              <Icon name="music" className="h-3 w-3 text-accent" />
-              <span>Listen to favorite music</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-ink border border-line">
-              <Icon name="phone" className="h-3 w-3 text-accent" />
-              <span>Catch up with a friend</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-ink border border-line">
-              <Icon name="feel" className="h-3 w-3 text-accent" />
-              <span>Take a 5-min mindful pause</span>
-            </span>
+            {resetActions.map((action) => (
+              <span
+                key={action.label}
+                className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-ink border border-line"
+              >
+                <Icon name={action.icon} className="h-3 w-3 text-accent" />
+                <span>{action.label}</span>
+              </span>
+            ))}
           </div>
         </section>
 
@@ -769,9 +805,15 @@ export default function Result({
                 </p>
                 {result.voice.transcript && <p>Heard: {result.voice.transcript}</p>}
                 <p className="text-sm leading-relaxed text-muted">
-                  {result.voice.used_in_score
-                    ? "The journal was empty, so these spoken words were scored. Pitch and silence are not part of the number."
-                    : "Pitch and silence are shown here. They do not change the behavior result."}
+                  {result.screen?.parts?.voice
+                    ? `Voice acoustics screened as ${result.screen.parts.voice}${
+                        result.voice.used_in_score
+                          ? "; spoken words also filled the empty journal."
+                          : " and can raise the combined result."
+                      }`
+                    : result.voice.used_in_score
+                      ? "The journal was empty, so these spoken words were scored. Calm pitch and silence did not raise the screen."
+                      : "Pitch and silence looked calm, so voice did not raise the combined screen."}
                 </p>
               </div>
             </Card>
@@ -779,23 +821,29 @@ export default function Result({
           {result.image && (
             <Card title="Image" icon="image">
               <div className="space-y-2">
-                <p>
-                  {result.image.appearance === "sad"
-                    ? "Looks sad."
-                    : result.image.appearance === "low"
-                      ? "Looks low."
-                      : result.image.appearance === "steady"
-                        ? "Looks steady."
-                        : "No clear look."}
+                <p className="font-medium text-ink">
+                  {result.image.appearance_source === "unavailable"
+                    ? "Photo saved. Look analysis unavailable right now."
+                    : result.image.appearance === "sad"
+                      ? "Looks sad."
+                      : result.image.appearance === "low"
+                        ? "Looks low / tired."
+                        : result.image.appearance === "steady"
+                          ? "Looks steady."
+                          : "No clear face look detected."}
                 </p>
                 {result.image.appearance_note && <p>{result.image.appearance_note}</p>}
                 <p>
                   {result.image.width} by {result.image.height} pixels. Brightness{" "}
-                  {Math.round(result.image.brightness * 100)}%.
+                  {Math.round((result.image.brightness || 0) * 100)}%.
                 </p>
                 <p>{result.image.writing ? `Writing seen: ${result.image.writing}` : "No writing was visible."}</p>
                 <p className="text-sm leading-relaxed text-muted">
-                  Gemini read this photo. A sad or low look can raise the result. This is not a diagnosis.
+                  {result.image.appearance_source === "unavailable"
+                    ? "Gemini photo analysis needs billing credits. Journal and behavior answers still work. This is not a diagnosis."
+                    : result.image.appearance && result.image.appearance !== "unclear"
+                      ? "Gemini read this photo. A sad or low look can raise the result. This is not a diagnosis."
+                      : "Use a clear front-facing selfie (good light, face visible), then try again. This is not a diagnosis."}
                 </p>
               </div>
             </Card>
@@ -837,13 +885,15 @@ export default function Result({
               <Icon name="history" className="h-4 w-4 text-accent" />
               View all history
             </button>
-            <button
-              type="button"
-              onClick={onEdit}
-              className="rounded-full border border-line bg-card px-5 py-3 text-sm font-medium text-ink hover:bg-paper"
-            >
-              Edit this check-in
-            </button>
+            {canEdit && onEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-full border border-line bg-card px-5 py-3 text-sm font-medium text-ink hover:bg-paper"
+              >
+                Edit this check-in
+              </button>
+            )}
             <button
               type="button"
               onClick={() => downloadSummary(result)}

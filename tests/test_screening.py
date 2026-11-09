@@ -22,9 +22,15 @@ SAMPLE_WAV = ROOT / "data" / "raw" / "sample_voice.wav"
 
 
 def quiet_predict(*args, **kwargs):
+    wellness = {
+        "text": "Take a gentle pause and care for yourself today.",
+        "tip_source": "fallback",
+        "voice_provider": None,
+        "audio_base64": None,
+    }
     with patch("backend.predict.explain", return_value=None), patch(
         "backend.predict.transcribe", return_value=None
-    ), patch("backend.predict.synthesize_speech", return_value=None):
+    ), patch("backend.predict.compose_wellness_with_cartesia", return_value=wellness):
         return predict_risk(*args, **kwargs)
 
 
@@ -179,6 +185,9 @@ class PredictionTests(unittest.TestCase):
         self.assertEqual(steady["daily_behavior"]["points"], 0)
         self.assertEqual(steady["inputs_used"], ["text"])
         self.assertEqual(steady["risk_level"], "high")
+        # Heavy journal can raise the shown screen above calm behavior answers.
+        self.assertEqual(steady["screen"]["level"], "high")
+        self.assertIn("writing", steady["screen"]["source"])
 
         strained = quiet_predict(
             "",
@@ -196,6 +205,54 @@ class PredictionTests(unittest.TestCase):
         self.assertEqual(strained["risk_level"], "high")
         self.assertEqual(strained["inputs_used"], ["behavior"])
         self.assertIn("Sleep was poor.", strained["daily_behavior"]["notes"])
+
+    def test_distressed_journal_raises_moderate_behavior_screen(self):
+        text = (
+            "I feel overwhelmed and anxious. I cannot sleep well, my energy is very low, "
+            "and I have been alone most of the day. Everything feels heavy and hard to manage."
+        )
+        result = quiet_predict(
+            text,
+            None,
+            None,
+            None,
+            None,
+            sleep="short",
+            energy="usual",
+            company="no",
+            routine="partly",
+        )
+        self.assertEqual(result["daily_behavior"]["points"], 4)
+        self.assertEqual(result["daily_behavior"]["level"], "moderate")
+        self.assertEqual(result["risk_level"], "high")
+        self.assertEqual(result["screen"]["level"], "high")
+        self.assertIn("writing", result["screen"]["parts"])
+        self.assertIn("behavior", result["screen"]["parts"])
+
+    def test_voice_and_behavior_combine_on_screen(self):
+        from backend.predict import screen_flag, voice_screen_level
+
+        self.assertEqual(
+            voice_screen_level({"pause_ratio": 0.7, "pause_count": 5, "jitter": 0.02}),
+            "high",
+        )
+        self.assertEqual(
+            voice_screen_level({"pause_ratio": 0.42, "pause_count": 3, "jitter": 0.01}),
+            "moderate",
+        )
+        self.assertIsNone(voice_screen_level({"pause_ratio": 0.1, "pause_count": 0, "jitter": 0.01}))
+
+        daily = {"level": "moderate", "points": 4, "out_of": 8}
+        shown = screen_flag(
+            daily,
+            {"appearance_level": None},
+            writing_level="low",
+            voice_level="high",
+        )
+        self.assertEqual(shown["level"], "high")
+        self.assertEqual(shown["parts"]["behavior"], "moderate")
+        self.assertEqual(shown["parts"]["voice"], "high")
+        self.assertIn("voice", shown["source"])
 
     def test_sad_photo_raises_the_screen(self):
         from tempfile import NamedTemporaryFile
@@ -227,7 +284,12 @@ class PredictionTests(unittest.TestCase):
             Path(path).unlink(missing_ok=True)
         self.assertEqual(mixed["daily_behavior"]["level"], "low")
         self.assertEqual(mixed["screen"]["level"], "high")
-        self.assertEqual(mixed["screen"]["source"], "both")
+        self.assertIn("photo", mixed["screen"]["parts"])
+        self.assertTrue(
+            mixed["screen"]["source"] == "both"
+            or "photo" in mixed["screen"]["source"]
+            or "writing" in mixed["screen"]["source"]
+        )
         self.assertEqual(mixed["image"]["appearance"], "sad")
         self.assertEqual(photo["risk_level"], "high")
         self.assertEqual(photo["inputs_used"], ["image"])
@@ -331,8 +393,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_predict_does_not_require_external_keys(self):
+        wellness = {
+            "text": "Take a gentle pause and care for yourself today.",
+            "tip_source": "fallback",
+            "voice_provider": None,
+            "audio_base64": None,
+        }
         with patch("backend.predict.explain", return_value=None), patch(
-            "backend.predict.synthesize_speech", return_value=None
+            "backend.predict.compose_wellness_with_cartesia", return_value=wellness
         ):
             response = self.client.post(
                 "/predict",

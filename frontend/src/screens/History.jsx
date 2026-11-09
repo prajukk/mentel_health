@@ -15,30 +15,96 @@ const LEVEL_BG = {
   high: "bg-high/10 text-high border-high/30",
 }
 
+function trendLabel(entry) {
+  if (entry.score_kind === "behavior" && entry.behavior_points != null) {
+    return `${entry.behavior_points}/8`
+  }
+  return Number(entry.probability).toFixed(2)
+}
+
 function Trend({ entries }) {
   const points = [...entries].reverse()
   if (points.length < 2) return null
   const width = 640
-  const height = 180
-  const pad = 24
-  const scores = points.map((entry) => entry.probability)
+  const height = 220
+  const pad = { left: 44, right: 24, top: 36, bottom: 48 }
+  const scores = points.map((entry) => Number(entry.probability) || 0)
   const low = Math.max(0, Math.min(...scores) - 0.05)
   const high = Math.min(1, Math.max(...scores) + 0.05)
   const span = high - low || 1
+  const innerWidth = width - pad.left - pad.right
+  const innerHeight = height - pad.top - pad.bottom
   const coordinates = points.map((entry, index) => {
-    const x = pad + (index / (points.length - 1)) * (width - pad * 2)
-    const y = pad + ((high - entry.probability) / span) * (height - pad * 2)
+    const x = pad.left + (index / (points.length - 1)) * innerWidth
+    const y = pad.top + ((high - (Number(entry.probability) || 0)) / span) * innerHeight
     return { ...entry, x, y }
   })
   const path = coordinates.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ")
+  const first = coordinates[0]
+  const last = coordinates[coordinates.length - 1]
+  const firstScore = Number(first.probability) || 0
+  const lastScore = Number(last.probability) || 0
+  const change =
+    lastScore < firstScore - 0.02
+      ? "Your latest score is lower than your first saved check-in (lower can mean less concern)."
+      : lastScore > firstScore + 0.02
+        ? "Your latest score is higher than your first saved check-in (higher can mean more concern)."
+        : "Your latest score is about the same as your earlier check-ins."
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Recent risk probabilities">
-      <path d={path} fill="none" stroke="#0E6B67" strokeWidth="2.5" />
-      {coordinates.map((point) => (
-        <circle key={point.id} cx={point.x} cy={point.y} r="4" fill="#0E6B67" />
-      ))}
-    </svg>
+    <div>
+      <p className="mb-3 text-sm text-muted">
+        Left is older, right is newer. Higher on the chart means a higher screening score.
+        {" "}
+        {change}
+      </p>
+      <div className="flex gap-2">
+        <div className="flex w-10 shrink-0 flex-col justify-between py-2 text-[10px] leading-tight text-muted">
+          <span>Higher</span>
+          <span>Lower</span>
+        </div>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="min-w-0 flex-1"
+          role="img"
+          aria-label="Score over your saved check-ins, older on the left and newer on the right"
+        >
+          <line
+            x1={pad.left}
+            x2={pad.left}
+            y1={pad.top}
+            y2={height - pad.bottom}
+            stroke="#E6DCCB"
+          />
+          <line
+            x1={pad.left}
+            x2={width - pad.right}
+            y1={height - pad.bottom}
+            y2={height - pad.bottom}
+            stroke="#E6DCCB"
+          />
+          <path d={path} fill="none" stroke="#0E6B67" strokeWidth="2.5" />
+          {coordinates.map((point) => {
+            const date = new Date(point.at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })
+            const labelY = Math.max(14, point.y - 12)
+            return (
+              <g key={point.id}>
+                <circle cx={point.x} cy={point.y} r="4.5" fill="#0E6B67" />
+                <text x={point.x} y={labelY} textAnchor="middle" fontSize="11" fill="#1F1A17">
+                  {trendLabel(point)} · {point.risk_level}
+                </text>
+                <text x={point.x} y={height - 16} textAnchor="middle" fontSize="11" fill="#6B625A">
+                  {date}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+    </div>
   )
 }
 
@@ -129,7 +195,7 @@ export default function History({
 
         {entries.length > 1 && (
           <div className="mt-8 rounded-[20px] border border-line bg-card p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Score Trajectory</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Score over time</p>
             <Trend entries={entries} />
           </div>
         )}

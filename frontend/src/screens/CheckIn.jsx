@@ -70,6 +70,7 @@ export default function CheckIn({
   onStep,
   account,
   onHome,
+  onNewCheckIn,
   onHistory,
   onEvaluation,
   onProfile,
@@ -85,8 +86,12 @@ export default function CheckIn({
   const [listening, setListening] = useState(false)
   const [interim, setInterim] = useState("")
   const [speechError, setSpeechError] = useState("")
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraError, setCameraError] = useState("")
   const recorderRef = useRef(null)
   const streamRef = useRef(null)
+  const cameraStreamRef = useRef(null)
+  const videoRef = useRef(null)
   const timerRef = useRef(null)
   const frameRef = useRef(0)
   const audioContextRef = useRef(null)
@@ -99,6 +104,106 @@ export default function CheckIn({
   useEffect(() => {
     textRef.current = draft.text
   }, [draft.text])
+
+  function attachImageFile(file) {
+    if (!file || !file.type?.startsWith("image/")) return false
+    onChange({ imageFile: file, imageUrl: URL.createObjectURL(file) })
+    return true
+  }
+
+  function stopCamera() {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    cameraStreamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    setCameraOpen(false)
+  }
+
+  async function startCamera() {
+    setCameraError("")
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("This browser cannot open the camera. Upload or paste a photo instead.")
+      return
+    }
+    try {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+      cameraStreamRef.current = null
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      })
+      cameraStreamRef.current = stream
+      setCameraOpen(true)
+    } catch {
+      setCameraError("Camera permission was blocked or unavailable. Upload or paste a photo instead.")
+      stopCamera()
+    }
+  }
+
+  useEffect(() => {
+    if (!cameraOpen || !cameraStreamRef.current || !videoRef.current) return undefined
+    const video = videoRef.current
+    video.srcObject = cameraStreamRef.current
+    video.play?.().catch(() => {})
+    return () => {
+      video.srcObject = null
+    }
+  }, [cameraOpen])
+
+  function captureLivePhoto() {
+    const video = videoRef.current
+    if (!video || !video.videoWidth) {
+      setCameraError("Camera is still starting. Try Capture again in a moment.")
+      return
+    }
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const context = canvas.getContext("2d")
+    // Mirror selfie so the saved photo matches the preview.
+    context.translate(canvas.width, 0)
+    context.scale(-1, 1)
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          setCameraError("Could not capture the photo. Try again or upload a file.")
+          return
+        }
+        const file = new File([blob], `live-photo-${Date.now()}.jpg`, { type: "image/jpeg" })
+        attachImageFile(file)
+        stopCamera()
+        setCameraError("")
+      },
+      "image/jpeg",
+      0.92,
+    )
+  }
+
+  useEffect(() => {
+    if (step !== 3) {
+      stopCamera()
+      return undefined
+    }
+    function onPaste(event) {
+      const items = event.clipboardData?.items
+      if (!items) return
+      for (const item of items) {
+        if (item.type?.startsWith("image/")) {
+          const file = item.getAsFile()
+          if (file?.type?.startsWith("image/")) {
+            event.preventDefault()
+            onChange({ imageFile: file, imageUrl: URL.createObjectURL(file) })
+          }
+          break
+        }
+      }
+    }
+    window.addEventListener("paste", onPaste)
+    return () => {
+      window.removeEventListener("paste", onPaste)
+      stopCamera()
+    }
+  }, [step, onChange])
 
   function stopSpeaking() {
     listeningRef.current = false
@@ -172,6 +277,8 @@ export default function CheckIn({
       window.cancelAnimationFrame(frameRef.current)
       listeningRef.current = false
       recognitionRef.current?.stop()
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+      cameraStreamRef.current = null
     },
     [],
   )
@@ -299,7 +406,7 @@ export default function CheckIn({
         currentView="checkin"
         account={account}
         onHome={onHome}
-        onNewCheckIn={() => onStep(0)}
+        onNewCheckIn={onNewCheckIn || (() => onStep(0))}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
         onProfile={onProfile}
@@ -397,7 +504,10 @@ export default function CheckIn({
               </p>
               <textarea
                 value={draft.text}
-                onChange={(event) => onChange({ text: event.target.value })}
+                onChange={(event) => {
+                  textRef.current = event.target.value
+                  onChange({ text: event.target.value })
+                }}
                 placeholder="Write what has been on your mind today..."
                 className={`${controlClass} mt-6 min-h-64 resize-y leading-relaxed`}
               />
@@ -528,36 +638,109 @@ export default function CheckIn({
                 Photo Assessment
               </h1>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                Upload a current photo. Gemini evaluates observable facial cues and brightness.
-                This is purely supplementary and never replaces professional evaluation.
+                Capture a live photo with your camera, or upload / paste (Ctrl+V) one. Gemini reads facial cues and
+                brightness. This is purely supplementary and never replaces professional evaluation.
               </p>
-              <label className="mt-6 block cursor-pointer rounded-[22px] border-2 border-dashed border-line bg-paper/50 p-8 text-center transition-colors hover:border-accent">
-                <Icon name="image" className="mx-auto h-8 w-8 text-accent/80" />
-                <span className="mt-2 block text-sm font-medium text-ink">Click to select a photo</span>
-                <span className="mt-1 block text-xs text-muted">PNG, JPG, or WEBP up to 15MB</span>
+
+              {!cameraOpen ? (
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white hover:opacity-95"
+                  >
+                    <Icon name="camera" className="h-4 w-4" />
+                    Take live photo
+                  </button>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-line bg-card px-5 py-2.5 text-sm font-medium text-ink hover:border-accent">
+                    <Icon name="image" className="h-4 w-4 text-accent" />
+                    Upload photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        attachImageFile(file)
+                        event.target.value = ""
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="mt-6 overflow-hidden rounded-[22px] border border-line bg-ink/95">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="aspect-video w-full object-cover"
+                    style={{ transform: "scaleX(-1)" }}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3">
+                    <p className="text-xs text-muted">Position your face in frame, then capture.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={stopCamera}
+                        className="rounded-full border border-line px-4 py-2 text-xs font-medium text-muted hover:text-ink"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={captureLivePhoto}
+                        className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-white"
+                      >
+                        <Icon name="camera" className="h-3.5 w-3.5" />
+                        Capture
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <label
+                className="mt-4 block cursor-pointer rounded-[22px] border-2 border-dashed border-line bg-paper/50 p-6 text-center transition-colors hover:border-accent"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const file = event.dataTransfer?.files?.[0]
+                  attachImageFile(file)
+                }}
+              >
+                <Icon name="image" className="mx-auto h-7 w-7 text-accent/80" />
+                <span className="mt-2 block text-sm font-medium text-ink">Drop or paste a photo here</span>
+                <span className="mt-1 block text-xs text-muted">PNG, JPG, or WEBP up to 15MB · Ctrl+V works here</span>
                 <input
                   type="file"
                   accept="image/*"
                   className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0]
-                    if (!file) return
-                    onChange({ imageFile: file, imageUrl: URL.createObjectURL(file) })
+                    attachImageFile(file)
+                    event.target.value = ""
                   }}
                 />
               </label>
+
+              {cameraError && <p className="mt-3 text-xs text-high">{cameraError}</p>}
+
               {draft.imageUrl && (
                 <div className="mt-4 flex items-center gap-4">
                   <img
                     src={draft.imageUrl}
-                    alt="Chosen upload"
+                    alt="Chosen photo"
                     className="max-h-48 rounded-[18px] border border-line object-cover shadow-xs"
                   />
                   <div>
                     <p className="text-xs font-semibold text-ink">Photo attached</p>
                     <button
                       type="button"
-                      onClick={() => onChange({ imageFile: null, imageUrl: "" })}
+                      onClick={() => {
+                        stopCamera()
+                        onChange({ imageFile: null, imageUrl: "" })
+                      }}
                       className="mt-2 rounded-full border border-line bg-card px-3 py-1 text-xs text-muted hover:text-high"
                     >
                       Remove photo

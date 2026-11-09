@@ -19,6 +19,19 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_FILE_BYTES = 15 * 1024 * 1024  # 15 MB limit per uploaded file
 
 
+@app.get("/")
+def root():
+    return {
+        "service": "Mental Health Risk Check API",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+        "predict": "POST /predict",
+        "metrics": "GET /metrics",
+        "frontend": "http://127.0.0.1:5173",
+    }
+
+
 @app.get("/health")
 def health():
     return {

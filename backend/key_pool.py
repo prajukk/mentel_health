@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
-RETRYABLE_STATUS = {401, 403, 408, 429, 500, 502, 503, 504}
+RETRYABLE_STATUS = {401, 402, 403, 408, 429, 500, 502, 503, 504}
 
 
 class RetryableAPIError(Exception):

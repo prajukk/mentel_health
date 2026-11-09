@@ -1,13 +1,15 @@
 import { useState } from "react"
 import { createAccount, signIn } from "../auth.js"
+import Icon from "../components/Icons.jsx"
 
 const fieldClass =
   "mt-2 w-full rounded-2xl border border-line bg-paper px-4 py-3 text-ink outline-none focus:border-accent"
 
 export default function Login({ onSignedIn }) {
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
 
@@ -16,7 +18,7 @@ export default function Login({ onSignedIn }) {
     setBusy(true)
     setError("")
     try {
-      const account = creating ? await createAccount(name, password) : await signIn(name, password)
+      const account = creating ? await createAccount(email, password) : await signIn(email, password)
       onSignedIn(account)
     } catch (reason) {
       setError(reason.message)
@@ -34,7 +36,7 @@ export default function Login({ onSignedIn }) {
             Mental health risk check
           </h1>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
-            This is an early flag, not a diagnosis. Sign in to keep your scores on this browser.
+            This is an early flag, not a diagnosis. Sign in with Gmail to keep your scores on this browser.
           </p>
         </div>
         <p className="max-w-sm text-sm leading-relaxed text-muted">A screening flag, kept only on this browser.</p>
@@ -42,26 +44,40 @@ export default function Login({ onSignedIn }) {
       <div className="flex items-center px-6 py-12 sm:px-12 lg:px-16">
         <form onSubmit={submit} className="w-full max-w-md rounded-[28px] border border-line bg-card p-8 sm:p-10">
           <h2 className="font-display text-3xl">{creating ? "Create an account" : "Sign in"}</h2>
-          <label className="mt-8 block text-sm text-muted" htmlFor="name">
-            Name
+          <label className="mt-8 block text-sm text-muted" htmlFor="gmail">
+            Gmail
             <input
-              id="name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              autoComplete="username"
+              id="gmail"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="name@gmail.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className={fieldClass}
             />
           </label>
           <label className="mt-5 block text-sm text-muted" htmlFor="password">
             Password
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={creating ? "new-password" : "current-password"}
-              className={fieldClass}
-            />
+            <span className="relative mt-2 block">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={creating ? "new-password" : "current-password"}
+                className={`${fieldClass} mt-0 pr-12`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1.5 text-muted transition-colors hover:bg-card hover:text-ink"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                <Icon name={showPassword ? "eyeOff" : "eye"} className="h-5 w-5" />
+              </button>
+            </span>
           </label>
           {error && <p className="mt-4 text-sm text-high">{error}</p>}
           <button

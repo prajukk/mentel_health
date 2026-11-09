@@ -83,9 +83,16 @@ function shownScore(result) {
   }
 }
 
+function stripHeavyAudio(payload) {
+  if (!payload || typeof payload !== "object") return payload
+  const { wellness_tip_audio, empathic_audio_base64, ...rest } = payload
+  return rest
+}
+
 export function rememberCheckIn(result) {
   const previous = readHistory()
   const shown = shownScore(result)
+  const lightResult = stripHeavyAudio(result)
   const entry = {
     id: crypto.randomUUID(),
     at: new Date().toISOString(),
@@ -97,18 +104,29 @@ export function rememberCheckIn(result) {
     cues: result.cues || [],
     explanation: result.explanation || null,
     wellness_tip: result.wellness_tip || result.empathic_summary || null,
-    wellness_tip_audio: result.wellness_tip_audio || result.empathic_audio_base64 || null,
+    // Keep tip text, but do not persist large base64 WAV blobs (quota / crash risk).
+    wellness_tip_audio: null,
     empathic_summary: result.empathic_summary || result.wellness_tip || null,
-    empathic_audio_base64: result.empathic_audio_base64 || result.wellness_tip_audio || null,
+    empathic_audio_base64: null,
     daily_behavior: result.daily_behavior || null,
     voice: result.voice || null,
     image: result.image || null,
     behavior: result.behavior || null,
     screen: result.screen || null,
     crisis_detected: !!result.crisis_detected,
-    fullResult: result,
+    fullResult: lightResult,
   }
-  localStorage.setItem(storageKey(), JSON.stringify([entry, ...previous].slice(0, LIMIT)))
+  try {
+    localStorage.setItem(storageKey(), JSON.stringify([entry, ...previous].slice(0, LIMIT)))
+  } catch (error) {
+    console.warn("Could not save check-in history:", error)
+    try {
+      const slim = { ...entry, fullResult: stripHeavyAudio({ ...lightResult, voice: lightResult.voice ? { ...lightResult.voice, transcript: (lightResult.voice.transcript || "").slice(0, 280) } : null }) }
+      localStorage.setItem(storageKey(), JSON.stringify([slim, ...previous].slice(0, Math.min(LIMIT, 5))))
+    } catch {
+      // History is best-effort; scoring result should still be shown.
+    }
+  }
   return previous[0] || null
 }
 

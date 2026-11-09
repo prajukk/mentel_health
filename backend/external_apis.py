@@ -47,29 +47,53 @@ def _gemini_image(image_path, prompt, max_tokens):
     if not GEMINI_POOL:
         return None
     mime = mimetypes.guess_type(image_path)[0] or "image/jpeg"
+    # Temp upload files from FastAPI often have no extension; default JPEG.
+    if mime == "application/octet-stream":
+        mime = "image/jpeg"
     encoded = base64.b64encode(Path(image_path).read_bytes()).decode("ascii")
 
     def call(api_key):
         model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        response = requests.post(
-            GEMINI_URL.format(model=model),
-            headers={"x-goog-api-key": api_key},
-            json={
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt},
-                            {"inline_data": {"mime_type": mime, "data": encoded}},
-                        ]
-                    }
-                ],
-                "generationConfig": {"temperature": 0, "maxOutputTokens": max_tokens},
+        # gemini-2.5* uses thinking tokens; keep budget at 0 so maxOutputTokens
+        # are available for the visible answer (otherwise appearance becomes "unclear").
+        base_body = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": mime, "data": encoded}},
+                    ]
+                }
+            ],
+        }
+        configs = [
+            {
+                "temperature": 0,
+                "maxOutputTokens": max(max_tokens, 512),
+                "thinkingConfig": {"thinkingBudget": 0},
             },
-            timeout=30,
-        )
-        payload = _checked_response(response).json()
-        parts = payload["candidates"][0]["content"]["parts"]
-        return "".join(part.get("text", "") for part in parts).strip()
+            {
+                "temperature": 0,
+                "maxOutputTokens": max(max_tokens, 512),
+            },
+        ]
+        last_error = None
+        for generation_config in configs:
+            response = requests.post(
+                GEMINI_URL.format(model=model),
+                headers={"x-goog-api-key": api_key},
+                json={**base_body, "generationConfig": generation_config},
+                timeout=45,
+            )
+            if response.status_code == 400 and "thinkingConfig" in generation_config:
+                last_error = response
+                continue
+            payload = _checked_response(response).json()
+            parts = payload["candidates"][0]["content"]["parts"]
+            return "".join(part.get("text", "") for part in parts).strip()
+        if last_error is not None:
+            _checked_response(last_error)
+        return None
 
     try:
         return GEMINI_POOL.run(call)
@@ -99,36 +123,50 @@ def read_appearance(image_path):
     text = _gemini_image(
         image_path,
         (
-            "Look at this photo for an early screening screen. "
-            "Reply in exactly two lines and nothing else.\n"
-            "Appearance: sad\n"
-            "Note: one short sentence about the face, posture, or setting you can see.\n"
-            "Appearance must be one word: sad, low, steady, or unclear. "
-            "Use sad when the face looks down, tearful, or withdrawn. "
-            "Use low when the person looks tired. "
-            "Use steady when the person looks at ease. "
-            "Use unclear when no person is visible or the look cannot be told. "
-            "Do not name a disorder. Do not invent anything you cannot see."
+            "You are helping an early mental-health screening screen. "
+            "Look at the person in this photo (selfie, portrait, or casual shot is fine). "
+            "Reply in exactly two lines and nothing else:\n"
+            "Appearance: steady\n"
+            "Note: one short sentence about the face, eyes, or posture you can see.\n"
+            "Appearance must be exactly one of: sad, low, steady, unclear.\n"
+            "sad = downcast, tearful, withdrawn, frowning.\n"
+            "low = tired, flat, drained, weary.\n"
+            "steady = calm, neutral, at ease, or a normal selfie face.\n"
+            "unclear = only if no person/face is visible at all.\n"
+            "Prefer sad, low, or steady whenever a face is visible. "
+            "Do not name a disorder. Do not invent details you cannot see."
         ),
-        120,
+        256,
     )
     if not text:
         return None
     appearance = "unclear"
     note = ""
+    lowered_all = text.lower()
     for line in text.splitlines():
         cleaned_line = line.strip().strip("*-# `")
         lowered = cleaned_line.lower()
-        if "appearance:" in lowered:
-            word = re.sub(r"[^a-z]", "", lowered.split("appearance:", 1)[1].strip())
+        if "appearance" in lowered and ":" in lowered:
+            word = re.sub(r"[^a-z]", "", lowered.split(":", 1)[1].strip())
             if word in {"sad", "low", "steady", "unclear"}:
                 appearance = word
-        elif "note:" in lowered:
+        elif lowered.startswith("note") and ":" in lowered:
             parts = re.split(r"note\s*:\s*", cleaned_line, flags=re.IGNORECASE)
             if len(parts) > 1:
                 note = parts[1].strip(" *_\".'`")
+    # Fallback if the model ignored the label format but still named a look.
+    if appearance == "unclear":
+        for word in ("sad", "low", "steady"):
+            if re.search(rf"\b{word}\b", lowered_all):
+                appearance = word
+                break
     if not note:
-        note = "The look in the photo was not clear."
+        note = {
+            "sad": "The face looks down or withdrawn.",
+            "low": "The person looks tired or flat.",
+            "steady": "The person looks reasonably steady.",
+            "unclear": "The look in the photo was not clear.",
+        }[appearance]
     level = {"sad": "high", "low": "moderate", "steady": "low"}.get(appearance)
     return {"appearance": appearance, "note": note, "level": level}
 
@@ -224,7 +262,110 @@ def synthesize_speech(text):
         return None
 
 
+def _behavior_context(daily_behavior, voice, image):
+    answers = daily_behavior.get("answers", {}) if daily_behavior else {}
+    notes = daily_behavior.get("notes", []) if daily_behavior else []
+    appearance = (image or {}).get("appearance") or "none"
+    pause_ratio = (voice or {}).get("pause_ratio")
+    voice_bit = (
+        f"Voice silence share about {int(round(float(pause_ratio) * 100))}%."
+        if isinstance(pause_ratio, (int, float))
+        else "No voice sample."
+    )
+    return {
+        "sleep": answers.get("sleep", ""),
+        "energy": answers.get("energy", ""),
+        "company": answers.get("company", ""),
+        "routine": answers.get("routine", ""),
+        "notes": "; ".join(notes) if notes else "none",
+        "appearance": appearance,
+        "voice_bit": voice_bit,
+    }
+
+
+def _fallback_wellness_tip(risk_level, ctx):
+    sleep, energy, company, routine = ctx["sleep"], ctx["energy"], ctx["company"], ctx["routine"]
+    needs_rest = sleep in ("short", "poor", "none") or energy in ("low", "very_low")
+    feels_alone = company in ("no", "little")
+    routine_off = routine in ("partly", "no")
+
+    if risk_level == "low":
+        if feels_alone:
+            return (
+                "Your check-in looks fairly steady. A short, low-pressure connection can protect that balance — "
+                "send one kind message to someone you trust, then do something small that restores you, like soft music or a quiet stretch. "
+                "Keep tonight's wind-down gentle so your body keeps this rhythm."
+            )
+        return (
+            "You seem to be holding a steady rhythm today. Protect it with one small recovery habit: "
+            "five calm breaths, a favorite song, or a short walk without your phone. "
+            "Noticing what already helps is a strong form of self-care."
+        )
+
+    if risk_level == "moderate":
+        if needs_rest:
+            return (
+                "Your sleep or energy looks strained, so your mind may feel more reactive than usual. "
+                "Choose one restoring action in the next hour: dim the lights, drink water, and take a 10–15 minute screen-free pause with calm music. "
+                "If you can, send a light check-in to one safe person — connection plus rest often softens the load."
+            )
+        if feels_alone:
+            return (
+                "Spending much of the day alone can amplify worry, even when other parts of the day are okay. "
+                "Try one gentle social step: a short voice note or message to someone safe, without forcing a long talk. "
+                "Pair it with a grounding pause — feet on the floor, slow breathing for one minute."
+            )
+        if routine_off:
+            return (
+                "When routine slips, the mind often feels scattered. Rebuild with one tiny anchor only: "
+                "a simple meal, a short tidy-up, or a fixed bedtime reminder. "
+                "Then give yourself a brief soft reset with music or quiet — progress here is small and real."
+            )
+        return (
+            "Things feel a bit heavy, but manageable with small steps. Pick one stressor and shrink it: "
+            "write the next tiny action, take three slow breaths, then do only that. "
+            "Afterward, reach for comfort that is kind, not draining — calm music or a short trusted chat."
+        )
+
+    # high
+    if needs_rest and feels_alone:
+        return (
+            "You are carrying a lot with low energy and limited company, so go gentle on yourself. "
+            "First, stabilize your body: sit somewhere safe, breathe slowly, drink water, and rest your eyes for a few minutes. "
+            "Then contact one trusted person or a local support line — you do not have to hold this alone."
+        )
+    return (
+        "This check-in suggests a heavier day, so lower the demand on yourself. "
+        "Do one comforting body reset now — warm drink, soft music, or a short rest — then tell someone safe how you feel in one sentence. "
+        "If the weight stays high, talking with a counsellor or helpline is a strong, caring next step."
+    )
+
+
 def generate_wellness_tip(
+    risk_level,
+    probability,
+    cues=None,
+    excerpt=None,
+    daily_behavior=None,
+    voice=None,
+    image=None,
+    crisis_detected=False,
+):
+    """Return tip text only. Prefer Gemini; fall back to local behavioral tip."""
+    tip, _source = _compose_wellness_tip_text(
+        risk_level,
+        probability,
+        cues=cues,
+        excerpt=excerpt,
+        daily_behavior=daily_behavior,
+        voice=voice,
+        image=image,
+        crisis_detected=crisis_detected,
+    )
+    return tip
+
+
+def _compose_wellness_tip_text(
     risk_level,
     probability,
     cues=None,
@@ -236,88 +377,124 @@ def generate_wellness_tip(
 ):
     if crisis_detected:
         return (
-            "Here is your most important tip for right now: please know you are not alone, and you do not have to carry this heavy burden by yourself. "
-            "Take a slow, deep breath, put on some calming music, and reach out to someone you trust or a free 24/7 crisis helpline immediately. "
-            "Help and caring support are always here for you."
+            (
+                "Your words suggest you may be in deep distress, and you deserve immediate care. "
+                "Please pause, breathe slowly, and contact a trusted person or a free 24/7 crisis helpline now. "
+                "You are not alone, and getting support is a brave and healthy step."
+            ),
+            "crisis",
         )
 
-    answers = daily_behavior.get("answers", {}) if daily_behavior else {}
-    sleep = answers.get("sleep", "")
-    energy = answers.get("energy", "")
-    company = answers.get("company", "")
-    routine = answers.get("routine", "")
+    ctx = _behavior_context(daily_behavior, voice, image)
     safe_writing = excerpt.strip().replace("\n", " ")[:350] if excerpt else "No writing was provided."
-    cues_str = "; ".join(cues) if cues else "natural expressions"
+    cues_str = "; ".join(cues[:8]) if cues else "none listed"
+    score = float(probability or 0)
 
-    # Attempt with Gemini AI first
     if GEMINI_POOL:
         prompt = (
-            "You are a warm, wise, and uplifting daily wellness companion. Write 2 to 3 comforting, intelligent sentences "
-            "giving the user a personalized wellness tip for today. "
-            "Include nice, actionable suggestions such as listening to their favorite music, talking or connecting with friends, "
-            "taking a mindful breather, or enjoying a restorative pause, tailored intelligently to how their day went. "
-            "Speak directly to the user ('you'). Keep the tone supportive, gentle, and conversational for voice narration. "
-            "Do NOT diagnose or name clinical disorders.\n"
-            f"Screening indicator: {risk_level} (score {probability:.2f}). "
-            f"Sleep: {sleep}. Energy: {energy}. Social: {company}. Routine: {routine}. "
-            f"Journal thoughts: {safe_writing}. Cues: {cues_str}."
+            "You are a compassionate behavioral-health coach for an early screening app (not a clinician). "
+            "Write a personalized wellness tip grounded in human mental behavior: "
+            "stress, sleep debt, social withdrawal, and disrupted routine raise emotional load; "
+            "tiny restorative actions and safe connection reduce it.\n\n"
+            "Write exactly 2 or 3 short sentences, spoken naturally for voice playback.\n"
+            "Structure:\n"
+            "1) Briefly validate what their pattern suggests (sleep, energy, people, routine, or journal tone) without diagnosing.\n"
+            "2) Give ONE concrete micro-action they can do in the next 30–60 minutes.\n"
+            "3) Optionally add one gentle social or self-soothing support (music, message a safe person, short rest).\n\n"
+            "Rules:\n"
+            "- Speak as 'you'. Warm, calm, specific, non-judgmental.\n"
+            "- No clinical diagnosis, no disorder names, no medication advice.\n"
+            "- No toxic positivity ('just think happy'). No long lectures.\n"
+            "- Match intensity to screening level: low=maintain, moderate=restore, high=stabilize + seek support.\n"
+            "- Do not invent facts that are not in the inputs.\n"
+            "- Do not start with 'Here is your wellness tip for today:'.\n\n"
+            f"Screening level: {risk_level}. Score: {score:.2f}.\n"
+            f"Sleep answer: {ctx['sleep'] or 'not given'}.\n"
+            f"Energy answer: {ctx['energy'] or 'not given'}.\n"
+            f"People/company answer: {ctx['company'] or 'not given'}.\n"
+            f"Routine answer: {ctx['routine'] or 'not given'}.\n"
+            f"Behavior notes: {ctx['notes']}.\n"
+            f"Photo look: {ctx['appearance']}.\n"
+            f"{ctx['voice_bit']}\n"
+            f"Journal excerpt: {safe_writing}\n"
+            f"Writing cues: {cues_str}\n"
         )
 
         def call(api_key):
             model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            body = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.55,
+                    "maxOutputTokens": 320,
+                    "thinkingConfig": {"thinkingBudget": 0},
+                },
+            }
             response = requests.post(
                 GEMINI_URL.format(model=model),
                 headers={"x-goog-api-key": api_key},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": 220},
-                },
-                timeout=15,
+                json=body,
+                timeout=25,
             )
+            if response.status_code == 400:
+                # Older models may reject thinkingConfig.
+                body["generationConfig"].pop("thinkingConfig", None)
+                response = requests.post(
+                    GEMINI_URL.format(model=model),
+                    headers={"x-goog-api-key": api_key},
+                    json=body,
+                    timeout=25,
+                )
             payload = _checked_response(response).json()
             parts = payload["candidates"][0]["content"]["parts"]
             return "".join(part.get("text", "") for part in parts).strip()
 
         try:
             tip = GEMINI_POOL.run(call)
-            if tip and len(tip) > 25:
-                return tip
+            if tip and len(tip) > 40:
+                tip = re.sub(r"^\s*here is your wellness tip for today:\s*", "", tip, flags=re.IGNORECASE)
+                return tip.strip(), "gemini"
         except Exception:
             pass
 
-    # High-intelligence personalized fallback tips tailored to user's specific answers
-    if risk_level == "low":
-        if company in ("no", "little"):
-            return (
-                "Here is your wellness tip for today: Your day has a steady rhythm, making it a wonderful time to connect with others. "
-                "Put on your favorite feel-good music, text or call a friend you have been meaning to catch up with, "
-                "and take a mindful moment to celebrate how grounded you are feeling."
-            )
-        else:
-            return (
-                "Here is your wellness tip for today: You are maintaining a wonderful, healthy balance. "
-                "Take a few minutes to unwind with some uplifting music, share a laugh with friends or loved ones, "
-                "and enjoy the positive momentum you have built today."
-            )
-    elif risk_level == "moderate":
-        if energy in ("low", "very_low") or sleep in ("poor", "short", "none"):
-            return (
-                "Here is your wellness tip for today: Your body and mind are asking for gentle restoration. "
-                "Put on a playlist of soft, calming music, pour a warm drink, and take a 15-minute screen-free break. "
-                "Consider calling or messaging a close friend for a light chat—a little connection can work wonders when energy is low."
-            )
-        else:
-            return (
-                "Here is your wellness tip for today: When life feels a bit demanding, small pauses make all the difference. "
-                "Listen to music that brings you peace, step outside for five minutes of fresh air, "
-                "and reach out to a trusted friend to chat. You do not have to carry today's tasks all at once."
-            )
-    else:  # high
-        return (
-            "Here is your wellness tip for today: You are navigating a lot right now, so please give yourself full permission to slow down. "
-            "Put on some soothing, gentle music, wrap yourself in comfort, and connect with a close friend or family member who truly listens. "
-            "Sharing how you feel with someone you trust will help lighten this load, and remember that help is always here for you."
-        )
+    # Gemini failed / unavailable → local behavioral tip (Cartesia still narrates this).
+    return _fallback_wellness_tip(risk_level or "moderate", ctx), "fallback"
+
+
+def compose_wellness_with_cartesia(
+    risk_level,
+    probability,
+    cues=None,
+    excerpt=None,
+    daily_behavior=None,
+    voice=None,
+    image=None,
+    crisis_detected=False,
+):
+    """
+    Tip text: Gemini first, then local fallback.
+    Tip voice: always Cartesia Sonic when keys are available.
+    """
+    tip_text, tip_source = _compose_wellness_tip_text(
+        risk_level,
+        probability,
+        cues=cues,
+        excerpt=excerpt,
+        daily_behavior=daily_behavior,
+        voice=voice,
+        image=image,
+        crisis_detected=crisis_detected,
+    )
+    audio_bytes = synthesize_speech(tip_text) if tip_text else None
+    audio_base64 = (
+        f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode('ascii')}" if audio_bytes else None
+    )
+    return {
+        "text": tip_text,
+        "tip_source": tip_source,
+        "voice_provider": "cartesia" if audio_base64 else None,
+        "audio_base64": audio_base64,
+    }
 
 
 # Backward-compatible alias

@@ -127,21 +127,24 @@ export default function Header({
           <button
             type="button"
             onClick={onProfile}
-            title="Edit profile & emergency contacts"
-            className={`hidden items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all border sm:inline-flex ${
+            title={account}
+            className={`hidden max-w-[14rem] items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all border sm:inline-flex ${
               currentView === "profile"
-                ? "bg-accent text-white border-accent shadow-sm"
-                : "bg-paper text-ink border-line hover:border-accent hover:bg-card"
+                ? "border-accent bg-accent/10 text-ink shadow-sm"
+                : "border-line bg-paper text-ink hover:border-accent hover:bg-card"
             }`}
           >
-            <span className="h-2 w-2 rounded-full bg-low" />
-            <span className="font-semibold">{account}</span>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-low" />
+            <span className="truncate font-semibold text-ink">{account}</span>
           </button>
         )}
         {account && !onProfile && (
-          <span className="hidden items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-xs font-medium text-ink sm:inline-flex border border-line">
-            <span className="h-2 w-2 rounded-full bg-low" />
-            {account}
+          <span
+            title={account}
+            className="hidden max-w-[14rem] items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-medium text-ink sm:inline-flex"
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full bg-low" />
+            <span className="truncate">{account}</span>
           </span>
         )}
         <button

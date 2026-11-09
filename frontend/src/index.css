@@ -89,12 +89,12 @@ button.bg-accent:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-button.rounded-full.border {
+button.rounded-full.border:not(.bg-accent) {
   background: rgba(255, 253, 248, 0.72);
   transition: border-color 160ms ease, background 160ms ease;
 }
 
-button.rounded-full.border:hover:not(:disabled) {
+button.rounded-full.border:not(.bg-accent):hover:not(:disabled) {
   border-color: #cfc3ad;
   background: #fffdf8;
 }
