@@ -2,6 +2,35 @@
 
 **URLs:** http://127.0.0.1:5173 · http://127.0.0.1:8000/docs
 
+## Trained datasets and models (ready — do not retrain for testing)
+
+Every screening dataset is already prepared and trained. Manual testing only needs the running API + frontend.
+
+| Dataset / artifact | Path | Status |
+|--------------------|------|--------|
+| Dreaddit (cleaned) | `data/processed/dreaddit.csv` | Ready |
+| Text features | `data/processed/X_text.npz` | Trained |
+| Behavior features | `data/processed/X_behavior.npz` | Trained |
+| Combined features | `data/processed/X_all.npz` | Trained |
+| Voice sample features | `data/processed/X_voice_sample.npz` | Ready |
+| Text model (Random Forest) | `backend/artifacts/model_text.joblib` | Trained |
+| Behavior model (Linear SVM) | `backend/artifacts/model_behavior.joblib` | Trained |
+| Text + behavior model (Random Forest) | `backend/artifacts/model_both.joblib` | Trained |
+| TF-IDF vectorizer | `backend/artifacts/tfidf.joblib` | Trained |
+| Evaluation metrics | `reports/experiment1.csv` (+ missing-data experiments) | Ready |
+
+Live check-ins also use optional voice (librosa) and photo (Gemini) at prediction time; those are not separate train sets.
+
+Only retrain if you intentionally change features or models:
+
+```powershell
+cd d:\odee\mentalhealth\mentel_health
+.\.venv\Scripts\python.exe -m backend.build_features
+.\.venv\Scripts\python.exe -m backend.train
+```
+
+---
+
 ## Demo logins
 
 Pick the role tab on the login screen first.
@@ -100,6 +129,7 @@ To email real patients, verify a domain at [resend.com/domains](https://resend.c
 
 ## Quick pass / fail checklist
 
+- [ ] All datasets/models already trained (artifacts present; no retrain needed)
 - [ ] Check-in → result → history
 - [ ] Evaluation charts
 - [ ] Patient sees 3 doctors, books Meet/Zoom, cancels
