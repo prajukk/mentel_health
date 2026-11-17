@@ -90,11 +90,11 @@ def ensure_artifacts():
 
 @lru_cache(maxsize=1)
 def load_resources():
-    ensure_artifacts()
     try:
         nltk.download("vader_lexicon", quiet=True)
     except Exception:
         pass
+    ensure_artifacts()
     names = json.loads((ARTIFACT_DIR / "feature_names.json").read_text(encoding="utf-8"))
     return {
         "analyzer": SentimentIntensityAnalyzer(),

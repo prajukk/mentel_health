@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { createAccount, signIn } from "../auth.js"
+import { createAccount, seedProfileFromAccount, signIn } from "../auth.js"
 import { careLogin, careRegister } from "../careApi.js"
 import Icon from "../components/Icons.jsx"
 
@@ -39,14 +39,18 @@ export default function Login({ onSignedIn }) {
       }
 
       if (role === "doctor") {
+        if (creating) {
+          if (!name.trim()) throw new Error("Enter your full name.")
+          if (!phone.trim()) throw new Error("Enter your phone number.")
+        }
         const care = creating
           ? await careRegister({
               email,
               password,
-              name: name || email.split("@")[0],
+              name: name.trim(),
               role: "doctor",
-              phone,
-              whatsapp: phone,
+              phone: phone.trim(),
+              whatsapp: phone.trim(),
               license_number: licenseNumber,
               license_authority: "Medical Council",
               specialty: "Psychiatry",
@@ -60,9 +64,19 @@ export default function Login({ onSignedIn }) {
       }
 
       // Patient: keep existing screening auth + care patient account
+      const phoneNumber = phone.trim()
+      if (creating) {
+        if (!name.trim()) throw new Error("Enter your full name.")
+        if (!phoneNumber) throw new Error("Enter your phone number.")
+      }
+      const displayName = (name.trim() || email.split("@")[0]).trim()
+
       let localEmail = ""
       if (creating) {
-        localEmail = await createAccount(email, password)
+        localEmail = await createAccount(email, password, {
+          fullName: displayName,
+          phone: phoneNumber,
+        })
       } else {
         try {
           localEmail = await signIn(email, password)
@@ -77,10 +91,10 @@ export default function Login({ onSignedIn }) {
           ? await careRegister({
               email,
               password,
-              name: name || email.split("@")[0],
+              name: displayName,
               role: "patient",
-              phone,
-              whatsapp: phone,
+              phone: phoneNumber,
+              whatsapp: phoneNumber,
             })
           : await careLogin({ email, password })
       } catch (careError) {
@@ -95,10 +109,10 @@ export default function Login({ onSignedIn }) {
             care = await careRegister({
               email,
               password,
-              name: email.split("@")[0],
+              name: displayName || email.split("@")[0],
               role: "patient",
-              phone,
-              whatsapp: phone,
+              phone: phoneNumber,
+              whatsapp: phoneNumber,
             })
           } catch {
             try {
@@ -111,7 +125,13 @@ export default function Login({ onSignedIn }) {
           throw careError
         }
       }
-      onSignedIn({ email: localEmail || care.user.email, care })
+
+      const sessionEmail = localEmail || care.user.email
+      seedProfileFromAccount(sessionEmail, {
+        fullName: care?.user?.name || displayName,
+        phone: care?.user?.phone || phoneNumber,
+      })
+      onSignedIn({ email: sessionEmail, care })
     } catch (reason) {
       setError(typeof reason.message === "string" ? reason.message : "Sign in failed.")
     } finally {
@@ -158,8 +178,15 @@ export default function Login({ onSignedIn }) {
 
           {(role === "doctor" || role === "patient") && creating && (
             <label className="mt-6 block text-sm text-muted" htmlFor="name">
-              Full name
-              <input id="name" value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} />
+              Full name *
+              <input
+                id="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Alex Johnson"
+                className={fieldClass}
+              />
             </label>
           )}
 
@@ -198,10 +225,17 @@ export default function Login({ onSignedIn }) {
             </span>
           </label>
 
-          {creating && role === "patient" && (
+          {creating && (role === "patient" || role === "doctor") && (
             <label className="mt-5 block text-sm text-muted" htmlFor="phone">
-              Phone / WhatsApp
-              <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} />
+              Phone / WhatsApp *
+              <input
+                id="phone"
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +91 98765 43210"
+                className={fieldClass}
+              />
             </label>
           )}
 
