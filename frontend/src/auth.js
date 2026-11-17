@@ -75,6 +75,28 @@ export function signOut() {
   localStorage.removeItem(SESSION_KEY)
 }
 
+/** Ensure a local shell account exists so Header/session work for care-only roles (admin/doctor). */
+export function ensureLocalShellAccount(email, name = "") {
+  const cleaned = normalizeEmail(email)
+  const accounts = readAccounts()
+  if (!accounts[cleaned]) {
+    accounts[cleaned] = {
+      name: name || cleaned.split("@")[0],
+      email: cleaned,
+      salt: "care-shell",
+      hash: "care-shell",
+      fullName: name || cleaned.split("@")[0],
+      phone: "0000000000",
+      emergencyContactName: "Care Desk",
+      emergencyContactPhone: "0000000000",
+      profileComplete: true,
+    }
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
+  }
+  localStorage.setItem(SESSION_KEY, cleaned)
+  return cleaned
+}
+
 export function getProfile(email) {
   if (!email) return null
   const accounts = readAccounts()

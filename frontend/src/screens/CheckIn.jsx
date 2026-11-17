@@ -69,12 +69,14 @@ export default function CheckIn({
   step,
   onStep,
   account,
+  careRole = "",
   onHome,
   onNewCheckIn,
   onHistory,
   onEvaluation,
   onProfile,
   onSignOut,
+  onCare,
   onSubmit,
   submitting,
   error,
@@ -405,12 +407,14 @@ export default function CheckIn({
       <Header
         currentView="checkin"
         account={account}
+        careRole={careRole}
         onHome={onHome}
         onNewCheckIn={onNewCheckIn || (() => onStep(0))}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
         onProfile={onProfile}
         onSignOut={onSignOut}
+        onCare={onCare}
         historyCount={historyCount}
       />
 

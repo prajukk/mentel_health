@@ -10,12 +10,14 @@ const STEPS = [
 
 export default function Welcome({
   account,
+  careUser,
   onStart,
   onHome,
   onHistory,
   onEvaluation,
   onProfile,
   onSignOut,
+  onCare,
   lastCheckIn,
   historyCount = 0,
 }) {
@@ -24,12 +26,14 @@ export default function Welcome({
       <Header
         currentView="welcome"
         account={account}
+        careRole={careUser?.role}
         onHome={onHome}
         onNewCheckIn={onStart}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
         onProfile={onProfile}
         onSignOut={onSignOut}
+        onCare={onCare}
         historyCount={historyCount}
       />
 
@@ -69,6 +73,17 @@ export default function Welcome({
                 <Icon name="history" className="h-5 w-5 text-accent" />
                 View history {historyCount > 0 && `(${historyCount})`}
               </button>
+
+              {onCare && (
+                <button
+                  type="button"
+                  onClick={onCare}
+                  className="flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-6 py-4 text-base font-medium text-accent transition-colors hover:bg-accent/10"
+                >
+                  <Icon name="user" className="h-5 w-5" />
+                  Doctor consultation
+                </button>
+              )}
             </div>
           </div>
 

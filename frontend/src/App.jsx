@@ -1,11 +1,15 @@
 import { useRef, useState } from "react"
 import { predict } from "./api.js"
-import { currentSession, isProfileComplete, signOut } from "./auth.js"
+import { clearCareSession, getCareUser } from "./careApi.js"
+import { currentSession, ensureLocalShellAccount, isProfileComplete, signOut } from "./auth.js"
 import { compareWithPrevious, readHistory, rememberCheckIn, setHistoryAccount } from "./history.js"
+import AdminCare from "./screens/AdminCare.jsx"
 import CheckIn from "./screens/CheckIn.jsx"
+import DoctorCare from "./screens/DoctorCare.jsx"
 import Evaluation from "./screens/Evaluation.jsx"
 import History from "./screens/History.jsx"
 import Login from "./screens/Login.jsx"
+import PatientCare from "./screens/PatientCare.jsx"
 import Profile from "./screens/Profile.jsx"
 import Result from "./screens/Result.jsx"
 import Welcome from "./screens/Welcome.jsx"
@@ -28,8 +32,16 @@ function behaviorState(draft) {
   return { ready: filled === 4, partial: filled > 0 && filled < 4 }
 }
 
-function initialViewFor(account) {
+function careHomeView(role) {
+  if (role === "admin") return "admin"
+  if (role === "doctor") return "doctor"
+  if (role === "patient") return "patient"
+  return "welcome"
+}
+
+function initialViewFor(account, careUser) {
   if (!account) return "welcome"
+  if (careUser?.role === "admin" || careUser?.role === "doctor") return careHomeView(careUser.role)
   return isProfileComplete(account) ? "welcome" : "profile"
 }
 
@@ -39,9 +51,12 @@ export default function App() {
     setHistoryAccount(name)
     return name
   })
-  const [view, setView] = useState(() => initialViewFor(currentSession()))
+  const [careUser, setCareUser] = useState(() => getCareUser())
+  const [view, setView] = useState(() => initialViewFor(currentSession(), getCareUser()))
   const [profileGate, setProfileGate] = useState(() => {
     const name = currentSession()
+    const care = getCareUser()
+    if (care?.role === "admin" || care?.role === "doctor") return false
     return Boolean(name && !isProfileComplete(name))
   })
   const [step, setStep] = useState(0)
@@ -56,8 +71,13 @@ export default function App() {
 
   const historyList = readHistory()
   const historyCount = historyList.length
+  const isStaff = careUser?.role === "admin" || careUser?.role === "doctor"
 
   function requireProfileOr(run) {
+    if (isStaff) {
+      run()
+      return
+    }
     if (profileGate || (account && !isProfileComplete(account))) {
       setProfileGate(true)
       setView("profile")
@@ -69,6 +89,7 @@ export default function App() {
   const openHistory = () => requireProfileOr(() => setView("history"))
   const openProfile = () => setView("profile")
   const openEvaluation = () => requireProfileOr(() => setView("evaluation"))
+  const openCare = () => setView(careHomeView(careUser?.role || "patient"))
 
   function updateDraft(partial) {
     setDraft((current) => {
@@ -83,6 +104,11 @@ export default function App() {
   }
 
   function goHome() {
+    if (isStaff) {
+      setView(careHomeView(careUser.role))
+      setError("")
+      return
+    }
     requireProfileOr(() => {
       setView("welcome")
       setError("")
@@ -102,10 +128,23 @@ export default function App() {
     })
   }
 
-  function enter(name) {
-    setHistoryAccount(name)
-    setAccount(name)
-    const ready = isProfileComplete(name)
+  function enter(payload) {
+    const care = payload?.care || null
+    const email =
+      typeof payload === "string"
+        ? payload
+        : ensureLocalShellAccount(payload.email, care?.user?.name || "")
+    setHistoryAccount(email)
+    setAccount(email)
+    setCareUser(care?.user || getCareUser())
+    const role = care?.user?.role
+    if (role === "admin" || role === "doctor") {
+      setProfileGate(false)
+      setView(careHomeView(role))
+      setError("")
+      return
+    }
+    const ready = isProfileComplete(email)
     setProfileGate(!ready)
     setView(ready ? "welcome" : "profile")
     setError("")
@@ -128,6 +167,8 @@ export default function App() {
     setError("")
     setProfileGate(false)
     setView("welcome")
+    clearCareSession()
+    setCareUser(null)
     signOut()
     setHistoryAccount("")
     setAccount("")
@@ -174,8 +215,30 @@ export default function App() {
     return <Login onSignedIn={enter} />
   }
 
-  const needsProfile = profileGate || !isProfileComplete(account)
+  const needsProfile = !isStaff && (profileGate || !isProfileComplete(account))
   const activeView = needsProfile ? "profile" : view
+  const sharedNav = {
+    account,
+    careUser,
+    onHome: goHome,
+    onNewCheckIn: isStaff ? undefined : startNewCheckIn,
+    onHistory: openHistory,
+    onEvaluation: openEvaluation,
+    onProfile: isStaff ? undefined : openProfile,
+    onSignOut: leave,
+    onCareHome: careUser ? openCare : undefined,
+    historyCount,
+  }
+
+  if (activeView === "admin" && careUser?.role === "admin") {
+    return <AdminCare {...sharedNav} />
+  }
+  if (activeView === "doctor" && careUser?.role === "doctor") {
+    return <DoctorCare {...sharedNav} />
+  }
+  if (activeView === "patient" && careUser?.role === "patient") {
+    return <PatientCare {...sharedNav} onCareUserChange={setCareUser} />
+  }
 
   if (activeView === "checkin") {
     return (
@@ -185,12 +248,14 @@ export default function App() {
         step={step}
         onStep={setStep}
         account={account}
+        careRole={careUser?.role}
         onHome={goHome}
         onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={openEvaluation}
         onProfile={openProfile}
         onSignOut={leave}
+        onCare={careUser ? openCare : undefined}
         onSubmit={submit}
         submitting={submitting}
         error={error}
@@ -214,12 +279,14 @@ export default function App() {
             : undefined
         }
         account={account}
+        careRole={careUser?.role}
         onHome={goHome}
         onNewCheckIn={startNewCheckIn}
         onHistory={openHistory}
         onEvaluation={openEvaluation}
         onProfile={openProfile}
         onSignOut={leave}
+        onCare={careUser ? openCare : undefined}
         historyCount={historyCount}
       />
     )
@@ -282,12 +349,14 @@ export default function App() {
   return (
     <Welcome
       account={account}
+      careUser={careUser}
       onStart={startNewCheckIn}
       onHome={goHome}
       onHistory={openHistory}
       onEvaluation={openEvaluation}
       onProfile={openProfile}
       onSignOut={leave}
+      onCare={careUser ? openCare : undefined}
       lastCheckIn={historyList[0]}
       historyCount={historyCount}
     />

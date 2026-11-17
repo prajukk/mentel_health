@@ -4,8 +4,10 @@ from tempfile import NamedTemporaryFile
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.care_routes import router as care_router
 from backend.external_apis import CARTESIA_POOL, GEMINI_POOL, synthesize_speech
 from backend.predict import PredictionInputError, load_metrics, predict_risk
+from backend.seed_care import seed_care
 
 app = FastAPI(title="Mental Health Risk Check")
 app.add_middleware(
@@ -14,6 +16,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(care_router)
+
+
+@app.on_event("startup")
+def startup_care():
+    seed_care()
 AUDIO_SUFFIXES = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_FILE_BYTES = 15 * 1024 * 1024  # 15 MB limit per uploaded file
@@ -28,6 +36,7 @@ def root():
         "health": "/health",
         "predict": "POST /predict",
         "metrics": "GET /metrics",
+        "care": "/care/* (admin, doctor, patient consultation)",
         "frontend": "http://127.0.0.1:5173",
     }
 

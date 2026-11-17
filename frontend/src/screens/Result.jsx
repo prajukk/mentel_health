@@ -192,6 +192,7 @@ export default function Result({
   result,
   comparison,
   account,
+  careRole = "",
   canEdit = true,
   onEdit,
   onHome,
@@ -200,6 +201,7 @@ export default function Result({
   onProfile,
   onSignOut,
   onNewCheckIn,
+  onCare,
   historyCount = 0,
 }) {
   const daily = result.daily_behavior
@@ -450,12 +452,14 @@ export default function Result({
       <Header
         currentView="result"
         account={account}
+        careRole={careRole}
         onHome={onHome}
         onNewCheckIn={onNewCheckIn}
         onHistory={onHistory}
         onEvaluation={onEvaluation}
         onProfile={onProfile}
         onSignOut={onSignOut}
+        onCare={onCare}
         historyCount={historyCount}
       />
       <audio
@@ -559,7 +563,7 @@ export default function Result({
               ([name, level]) => name !== "behavior" && level === headline && daily?.level !== headline,
             ) && (
               <p className="mt-2 max-w-xl text-sm text-muted">
-                Combined from behavior, writing, voice, and photo — the highest band is shown.
+                Combined from behavior, writing, voice, and photo. The highest band is shown.
               </p>
             )}
           {result.image?.appearance && result.image.appearance !== "unclear" && (

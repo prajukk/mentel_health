@@ -6,6 +6,29 @@ A from-scratch explanation of the whole system: what it is, how data flows, whic
 
 ---
 
+## Care modules (Admin / Doctor / Patient)
+
+Added on top of screening (screening flow unchanged):
+
+| Role | Demo login | What they do |
+|---|---|---|
+| Admin | `admin@care.local` / `admin123` | Approve doctor licenses + patient consult access |
+| Doctor | `dr.meera@care.local` / `doctor123` (also arjun, leena) | Psychiatry slots, Meet/Zoom, reports (diet/lifestyle) |
+| Patient | `patient@care.local` / `patient123` | Book after Admin approval; recovery graph across visits |
+
+Pending patient demo: `pending.patient@care.local` / `patient123` (cannot book until Admin approves).
+
+APIs live under `/care/*` (proxied as `/api/care/*`). SQLite DB: `data/care.db`. Seed: `python -m backend.seed_care`.
+
+Cross-check features:
+- Admin sees **all doctor licenses** + pending approvals; patient approval is Admin-only
+- Patient booking blocked until Admin approval; Refresh status after approval
+- Book with date/time/fee + Google Meet or Zoom; cancel scheduled visits
+- Doctor manages slots, Meet/Zoom links, diet/lifestyle reports, recovery score
+- Patient recovery graph across completed visits; screening Home/Check-in unchanged
+
+---
+
 ## Table of contents
 
 1. [What this project is](#1-what-this-project-is)

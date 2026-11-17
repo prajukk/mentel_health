@@ -1,14 +1,27 @@
 import { useState } from "react"
 import { createAccount, signIn } from "../auth.js"
+import { careLogin, careRegister } from "../careApi.js"
 import Icon from "../components/Icons.jsx"
 
 const fieldClass =
   "mt-2 w-full rounded-2xl border border-line bg-paper px-4 py-3 text-ink outline-none focus:border-accent"
 
+const ROLES = [
+  { id: "patient", label: "Patient" },
+  { id: "doctor", label: "Doctor" },
+  { id: "admin", label: "Admin" },
+]
+
 export default function Login({ onSignedIn }) {
   const [creating, setCreating] = useState(false)
+  const [role, setRole] = useState("patient")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [name, setName] = useState("")
+  const [phone, setPhone] = useState("")
+  const [licenseNumber, setLicenseNumber] = useState("")
+  const [experienceYears, setExperienceYears] = useState("5")
+  const [consultFee, setConsultFee] = useState("700")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -18,10 +31,89 @@ export default function Login({ onSignedIn }) {
     setBusy(true)
     setError("")
     try {
-      const account = creating ? await createAccount(email, password) : await signIn(email, password)
-      onSignedIn(account)
+      if (role === "admin") {
+        if (creating) throw new Error("Admin accounts are seeded. Sign in with admin@care.local / admin123")
+        const care = await careLogin({ email, password })
+        onSignedIn({ email: care.user.email, care })
+        return
+      }
+
+      if (role === "doctor") {
+        const care = creating
+          ? await careRegister({
+              email,
+              password,
+              name: name || email.split("@")[0],
+              role: "doctor",
+              phone,
+              whatsapp: phone,
+              license_number: licenseNumber,
+              license_authority: "Medical Council",
+              specialty: "Psychiatry",
+              experience_years: Number(experienceYears) || 0,
+              bio: "Psychiatry consultant",
+              consult_fee: Number(consultFee) || 500,
+            })
+          : await careLogin({ email, password })
+        onSignedIn({ email: care.user.email, care })
+        return
+      }
+
+      // Patient: keep existing screening auth + care patient account
+      let localEmail = ""
+      if (creating) {
+        localEmail = await createAccount(email, password)
+      } else {
+        try {
+          localEmail = await signIn(email, password)
+        } catch {
+          localEmail = ""
+        }
+      }
+
+      let care = null
+      try {
+        care = creating
+          ? await careRegister({
+              email,
+              password,
+              name: name || email.split("@")[0],
+              role: "patient",
+              phone,
+              whatsapp: phone,
+            })
+          : await careLogin({ email, password })
+      } catch (careError) {
+        if (creating) {
+          try {
+            care = await careLogin({ email, password })
+          } catch {
+            throw careError
+          }
+        } else if (localEmail) {
+          try {
+            care = await careRegister({
+              email,
+              password,
+              name: email.split("@")[0],
+              role: "patient",
+              phone,
+              whatsapp: phone,
+            })
+          } catch {
+            try {
+              care = await careLogin({ email, password })
+            } catch {
+              throw careError
+            }
+          }
+        } else {
+          throw careError
+        }
+      }
+      onSignedIn({ email: localEmail || care.user.email, care })
     } catch (reason) {
-      setError(reason.message)
+      setError(typeof reason.message === "string" ? reason.message : "Sign in failed.")
     } finally {
       setBusy(false)
     }
@@ -30,22 +122,49 @@ export default function Login({ onSignedIn }) {
   return (
     <section className="grid min-h-screen lg:grid-cols-2">
       <div className="flex flex-col justify-between px-6 py-12 sm:px-12 lg:px-16 lg:py-16">
-        <p className="eyebrow">Early screening</p>
+        <p className="eyebrow">Screening + consultation</p>
         <div className="my-12">
           <h1 className="max-w-lg font-display text-6xl leading-[0.96] text-ink sm:text-7xl">
             Mental health risk check
           </h1>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-muted">
-            This is an early flag, not a diagnosis. Sign in with Gmail to keep your scores on this browser.
+            Multimodal screening stays on Home. Choose a role to sign in: patients book psychiatry visits, doctors run
+            Meet or Zoom consults, and admin approves licenses and patient access.
           </p>
         </div>
-        <p className="max-w-sm text-sm leading-relaxed text-muted">A screening flag, kept only on this browser.</p>
+        <p className="max-w-sm text-sm leading-relaxed text-muted">Early risk flag only, not a clinical diagnosis.</p>
       </div>
       <div className="flex items-center px-6 py-12 sm:px-12 lg:px-16">
         <form onSubmit={submit} className="w-full max-w-md rounded-[28px] border border-line bg-card p-8 sm:p-10">
           <h2 className="font-display text-3xl">{creating ? "Create an account" : "Sign in"}</h2>
-          <label className="mt-8 block text-sm text-muted" htmlFor="gmail">
-            Gmail
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            {ROLES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setRole(item.id)
+                  setError("")
+                }}
+                className={`rounded-full px-4 py-1.5 text-xs font-medium ${
+                  role === item.id ? "bg-accent text-white" : "border border-line text-muted"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {(role === "doctor" || role === "patient") && creating && (
+            <label className="mt-6 block text-sm text-muted" htmlFor="name">
+              Full name
+              <input id="name" value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} />
+            </label>
+          )}
+
+          <label className="mt-5 block text-sm text-muted" htmlFor="gmail">
+            Email
             <input
               id="gmail"
               type="email"
@@ -73,30 +192,53 @@ export default function Login({ onSignedIn }) {
                 onClick={() => setShowPassword((current) => !current)}
                 className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1.5 text-muted transition-colors hover:bg-card hover:text-ink"
                 aria-label={showPassword ? "Hide password" : "Show password"}
-                title={showPassword ? "Hide password" : "Show password"}
               >
                 <Icon name={showPassword ? "eyeOff" : "eye"} className="h-5 w-5" />
               </button>
             </span>
           </label>
+
+          {creating && role === "patient" && (
+            <label className="mt-5 block text-sm text-muted" htmlFor="phone">
+              Phone / WhatsApp
+              <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} />
+            </label>
+          )}
+
+          {creating && role === "doctor" && (
+            <>
+              <label className="mt-5 block text-sm text-muted" htmlFor="license">
+                License number
+                <input id="license" required value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className={fieldClass} />
+              </label>
+              <label className="mt-5 block text-sm text-muted" htmlFor="exp">
+                Experience (years)
+                <input id="exp" type="number" min="0" value={experienceYears} onChange={(e) => setExperienceYears(e.target.value)} className={fieldClass} />
+              </label>
+              <label className="mt-5 block text-sm text-muted" htmlFor="fee">
+                Consult fee (₹)
+                <input id="fee" type="number" min="0" value={consultFee} onChange={(e) => setConsultFee(e.target.value)} className={fieldClass} />
+              </label>
+              <p className="mt-2 text-xs text-muted">Specialty fixed to Psychiatry. License goes to Admin for approval.</p>
+            </>
+          )}
+
           {error && <p className="mt-4 text-sm text-high">{error}</p>}
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-8 rounded-full bg-accent px-8 py-3 text-white disabled:opacity-50"
-          >
+          <button type="submit" disabled={busy} className="mt-8 rounded-full bg-accent px-8 py-3 text-white disabled:opacity-50">
             {creating ? "Create account" : "Sign in"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setCreating((current) => !current)
-              setError("")
-            }}
-            className="mt-6 block text-sm text-muted"
-          >
-            {creating ? "I already have an account" : "Create an account"}
-          </button>
+          {role !== "admin" && (
+            <button
+              type="button"
+              onClick={() => {
+                setCreating((current) => !current)
+                setError("")
+              }}
+              className="mt-6 block text-sm text-muted"
+            >
+              {creating ? "I already have an account" : "Create an account"}
+            </button>
+          )}
         </form>
       </div>
     </section>
