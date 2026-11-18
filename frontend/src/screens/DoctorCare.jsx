@@ -33,7 +33,8 @@ export default function DoctorCare({
   const [rows, setRows] = useState([])
   const [mySlots, setMySlots] = useState([])
   const [error, setError] = useState("")
-  const [slotDate, setSlotDate] = useState("")
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const [slotDate, setSlotDate] = useState(todayIso)
   const [slotTime, setSlotTime] = useState("10:00")
   const [activeId, setActiveId] = useState(null)
   const [report, setReport] = useState(emptyReport)
@@ -133,7 +134,7 @@ export default function DoctorCare({
         <form onSubmit={addSlot} className="rounded-[22px] border border-line bg-card p-5">
           <h2 className="font-display text-2xl">Add availability</h2>
           <div className="mt-4 flex flex-wrap gap-3">
-            <input type="date" required value={slotDate} onChange={(e) => setSlotDate(e.target.value)} className="rounded-2xl border border-line bg-paper px-3 py-2" />
+            <input type="date" required min={todayIso} value={slotDate} onChange={(e) => setSlotDate(e.target.value)} className="rounded-2xl border border-line bg-paper px-3 py-2" />
             <input type="time" required value={slotTime} onChange={(e) => setSlotTime(e.target.value)} className="rounded-2xl border border-line bg-paper px-3 py-2" />
             <button type="submit" className="rounded-full bg-accent px-5 py-2 text-sm text-white">
               Save slot

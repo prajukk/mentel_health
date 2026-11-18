@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 import { predict } from "./api.js"
 import { clearCareSession, getCareUser } from "./careApi.js"
-import { currentSession, ensureLocalShellAccount, isProfileComplete, signOut } from "./auth.js"
+import { currentSession, ensureLocalShellAccount, isProfileComplete, seedProfileFromAccount, signOut } from "./auth.js"
 import { compareWithPrevious, readHistory, rememberCheckIn, setHistoryAccount } from "./history.js"
 import AdminCare from "./screens/AdminCare.jsx"
 import CheckIn from "./screens/CheckIn.jsx"
@@ -48,6 +48,10 @@ function initialViewFor(account, careUser) {
 export default function App() {
   const [account, setAccount] = useState(() => {
     const name = currentSession()
+    const care = getCareUser()
+    if (name && care) {
+      seedProfileFromAccount(name, { fullName: care.name, phone: care.phone })
+    }
     setHistoryAccount(name)
     return name
   })
@@ -134,6 +138,12 @@ export default function App() {
       typeof payload === "string"
         ? payload
         : ensureLocalShellAccount(payload.email, care?.user?.name || "")
+    if (care?.user) {
+      seedProfileFromAccount(email, {
+        fullName: care.user.name,
+        phone: care.user.phone,
+      })
+    }
     setHistoryAccount(email)
     setAccount(email)
     setCareUser(care?.user || getCareUser())

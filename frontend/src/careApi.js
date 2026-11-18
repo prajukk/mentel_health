@@ -42,7 +42,14 @@ async function careFetch(path, options = {}) {
   const response = await fetch(`/api/care${path}`, { ...options, headers })
   const payload = await readJson(response)
   if (!response.ok) {
-    throw new Error(payload?.detail || "Care request failed.")
+    const detail = payload?.detail
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((item) => item?.msg || JSON.stringify(item)).join("; ")
+          : detail?.msg || "Care request failed."
+    throw new Error(message)
   }
   return payload
 }

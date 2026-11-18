@@ -91,8 +91,13 @@ export default function PatientCare({
         slot_id: Number(selectedSlot),
         meeting_provider: provider,
       })
+      const emailNote = booked.email_sent
+        ? `Confirmation emailed to ${booked.email_to}.`
+        : `Saved in-app only — email not delivered${booked.email_to ? ` to ${booked.email_to}` : ""}${
+            booked.email_detail ? `: ${booked.email_detail}` : "."
+          }`
       setMessage(
-        `Booked visit ${booked.visit_number} with ${booked.doctor.name} on ${booked.slot_date} at ${booked.start_time}. Fee ₹${booked.fee}. Confirmation sent in-app (Resend email if configured).`,
+        `Booked visit ${booked.visit_number} with ${booked.doctor.name} on ${booked.slot_date} at ${booked.start_time}. Fee ₹${booked.fee}. ${emailNote}`,
       )
       setSelectedSlot("")
       await load()

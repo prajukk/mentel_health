@@ -41,18 +41,28 @@ export function currentSession() {
   return email
 }
 
-export async function createAccount(email, password) {
+export async function createAccount(email, password, extras = {}) {
   const cleaned = assertEmail(email)
   if (password.length < 4) throw new Error("Use a password with at least 4 characters.")
   const accounts = readAccounts()
   if (accounts[cleaned]) throw new Error("That Gmail is already in use.")
   const salt = crypto.randomUUID()
-  const localName = cleaned.split("@")[0]
+  const fullName = String(extras.fullName || extras.name || "").trim()
+  const phone = String(extras.phone || "").trim()
+  const localName = fullName || cleaned.split("@")[0]
   accounts[cleaned] = {
     name: localName,
     email: cleaned,
     salt,
     hash: await digest(salt, password),
+    fullName,
+    phone,
+    emergencyContactName: String(extras.emergencyContactName || "").trim(),
+    emergencyContactPhone: String(extras.emergencyContactPhone || "").trim(),
+    emergencyContactRelation: String(extras.emergencyContactRelation || "").trim(),
+    pronouns: String(extras.pronouns || "").trim(),
+    notes: String(extras.notes || "").trim(),
+    profileComplete: false,
   }
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
   localStorage.setItem(SESSION_KEY, cleaned)
@@ -147,6 +157,7 @@ export function saveProfile(email, data) {
     ...accounts[key],
     // Login Gmail stays the account identity; keep it in sync with the session key.
     email: key,
+    name: fullName || accounts[key].name || key.split("@")[0],
     fullName,
     phone,
     emergencyContactName,
@@ -155,6 +166,27 @@ export function saveProfile(email, data) {
     notes,
     profileComplete,
   }
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
+  return getProfile(email)
+}
+
+/** Prefill local profile name/phone from care registration without overwriting filled fields. */
+export function seedProfileFromAccount(email, extras = {}) {
+  if (!email) return null
+  const accounts = readAccounts()
+  const key = normalizeEmail(email)
+  if (!accounts[key]) return null
+  const fullName = String(extras.fullName || extras.name || "").trim()
+  const phone = String(extras.phone || "").trim()
+  const next = { ...accounts[key] }
+  if (fullName && !String(next.fullName || "").trim()) {
+    next.fullName = fullName
+    next.name = fullName
+  }
+  if (phone && !String(next.phone || "").trim()) {
+    next.phone = phone
+  }
+  accounts[key] = next
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
   return getProfile(email)
 }
