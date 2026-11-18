@@ -2,7 +2,7 @@
 
 A from-scratch explanation of the whole system: what it is, how data flows, which models are used, how to run it, and how to manually test every screen.
 
-> **Disclaimer:** This app is an **early screening flag only**. It is **not** a medical diagnosis and does not replace a counsellor, psychologist, or doctor. Crisis cues surface 24/7 helplines (e.g. Tele-MANAS / KIRAN in India, 988 in the US/Canada, [findahelpline.com](https://findahelpline.com/)).
+> **Disclaimer:** This app is an **early screening flag only**. It is **not** a medical diagnosis and does not replace a counsellor, psychologist, or doctor. Crisis cues surface India 24/7 helplines (Tele-MANAS 14416, KIRAN 1800-599-0019, iCall).
 
 ---
 

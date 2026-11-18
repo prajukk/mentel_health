@@ -313,7 +313,7 @@ export default function History({
                         <div className="mb-5 rounded-[16px] border border-high/30 bg-[#FFF5F4] p-4 text-sm text-ink">
                           <p className="font-semibold text-high">Crisis Support Resources</p>
                           <p className="mt-1 text-muted">
-                            This check-in triggered a crisis support alert. Helplines: Tele-MANAS (14416 / 1800-891-4416), 988 (US/Canada), 116 123 (UK).
+                            This check-in triggered a crisis support alert. Helplines: Tele-MANAS (14416 / 1800-891-4416), KIRAN (1800-599-0019), iCall (+91 91529 87821).
                           </p>
                         </div>
                       )}

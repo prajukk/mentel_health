@@ -159,11 +159,10 @@ export function downloadSummary(result, timestamp) {
     result.explanation ? `Summary: ${result.explanation}` : "",
     "",
     result.crisis_detected
-      ? "--- CRISIS SUPPORT HELPLINES (24/7) ---\n" +
-      "• India (Tele-MANAS): 14416 / 1800-891-4416\n" +
-      "• US & Canada: 988\n" +
-      "• UK (Samaritans): 116 123\n" +
-      "• International: https://findahelpline.com\n"
+      ? "--- CRISIS SUPPORT HELPLINES (INDIA, 24/7) ---\n" +
+      "• Tele-MANAS: 14416 / 1800-891-4416\n" +
+      "• KIRAN: 1800-599-0019\n" +
+      "• iCall: +91 91529 87821\n"
       : "",
     "--- IMPORTANT DISCLAIMER ---",
     result.disclaimer || "This is a screening flag, not a clinical diagnosis.",

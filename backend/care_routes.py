@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from backend.care_security import (
@@ -468,15 +469,42 @@ def add_slot(body: SlotBody, user: User = Depends(get_current_user), db: Session
         raise HTTPException(status_code=400, detail="Doctor profile missing.")
     if doctor.license_status != "approved":
         raise HTTPException(status_code=403, detail="License must be approved by Admin before adding slots.")
+    slot_date = body.slot_date.strip()
+    start_time = body.start_time.strip()
+    if not slot_date or not start_time:
+        raise HTTPException(status_code=400, detail="Date and start time are required.")
+    if slot_date < date_today():
+        raise HTTPException(status_code=400, detail="Availability must be today or a future date.")
+    existing = (
+        db.query(AvailabilitySlot)
+        .filter(
+            AvailabilitySlot.doctor_id == doctor.id,
+            AvailabilitySlot.slot_date == slot_date,
+            AvailabilitySlot.start_time == start_time,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"You already have a slot on {slot_date} at {start_time}. Pick another time.",
+        )
     slot = AvailabilitySlot(
         doctor_id=doctor.id,
-        slot_date=body.slot_date,
-        start_time=body.start_time,
-        end_time=body.end_time or body.start_time,
+        slot_date=slot_date,
+        start_time=start_time,
+        end_time=(body.end_time or start_time).strip(),
         is_booked=False,
     )
     db.add(slot)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"You already have a slot on {slot_date} at {start_time}. Pick another time.",
+        )
     db.refresh(slot)
     return {"id": slot.id, "slot_date": slot.slot_date, "start_time": slot.start_time, "end_time": slot.end_time}
 

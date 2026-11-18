@@ -37,11 +37,10 @@ function downloadSummary(result) {
       : "",
     "",
     result.crisis_detected
-      ? "--- CRISIS SUPPORT HELPLINES (24/7) ---\n" +
-      "• India (Tele-MANAS): 14416 / 1800-891-4416\n" +
-      "• US & Canada: 988\n" +
-      "• UK (Samaritans): 116 123\n" +
-      "• International: https://findahelpline.com\n"
+      ? "--- CRISIS SUPPORT HELPLINES (INDIA, 24/7) ---\n" +
+      "• Tele-MANAS: 14416 / 1800-891-4416\n" +
+      "• KIRAN: 1800-599-0019\n" +
+      "• iCall: +91 91529 87821\n"
       : "",
     "--- IMPORTANT DISCLAIMER ---",
     result.disclaimer || "This is a screening flag, not a clinical diagnosis.",
@@ -515,16 +514,13 @@ export default function Result({
                 </p>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <a href="tel:14416" className="inline-flex items-center gap-2 rounded-full bg-high px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
-                    India: Tele-MANAS (14416)
+                    Tele-MANAS (14416)
                   </a>
-                  <a href="tel:988" className="inline-flex items-center gap-2 rounded-full bg-high px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
-                    US / Canada: 988
+                  <a href="tel:18005990019" className="inline-flex items-center gap-2 rounded-full bg-high px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
+                    KIRAN (1800-599-0019)
                   </a>
-                  <a href="tel:116123" className="inline-flex items-center gap-2 rounded-full border border-high px-4 py-2 text-sm font-medium text-high hover:bg-high/10">
-                    UK: Samaritans (116 123)
-                  </a>
-                  <a href="https://findahelpline.com/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-4 py-2 text-sm font-medium text-accent hover:bg-paper">
-                    International: findahelpline.com
+                  <a href="tel:+919152987821" className="inline-flex items-center gap-2 rounded-full border border-high px-4 py-2 text-sm font-medium text-high hover:bg-high/10">
+                    iCall (+91 91529 87821)
                   </a>
                 </div>
               </div>
@@ -915,12 +911,12 @@ export default function Result({
           </div>
           <div className="mt-4 border-t border-line/60 pt-3">
             <a
-              href="https://findahelpline.com/"
+              href="https://telemanas.mohfw.gov.in/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-accent underline decoration-line underline-offset-4 hover:opacity-80"
             >
-              Need immediate support? Talk to a counsellor or a 24/7 crisis service →
+              Need immediate support? Call Tele-MANAS 14416 (India, 24/7) →
             </a>
           </div>
         </div>

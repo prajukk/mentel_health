@@ -412,7 +412,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(body["disclaimer"], "This is a screening flag, not a clinical diagnosis.")
         self.assertIsNone(body["explanation"])
         screen = (ROOT / "frontend" / "src" / "screens" / "Result.jsx").read_text(encoding="utf-8")
-        self.assertIn("https://findahelpline.com/", screen)
+        self.assertIn("https://telemanas.mohfw.gov.in/", screen)
 
 
 if __name__ == "__main__":

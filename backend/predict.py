@@ -44,10 +44,9 @@ CRISIS_PATTERNS = [
 ]
 
 CRISIS_HELPLINES = {
-    "india": {"name": "Tele-MANAS", "contact": "14416 / 1800-891-4416", "url": "https://telemanas.mohfw.gov.in"},
-    "us": {"name": "988 Suicide & Crisis Lifeline", "contact": "Call or Text 988", "url": "https://988lifeline.org"},
-    "uk": {"name": "Samaritans", "contact": "116 123", "url": "https://www.samaritans.org"},
-    "international": {"name": "Find A Helpline", "contact": "findahelpline.com", "url": "https://findahelpline.com"},
+    "tele_manas": {"name": "Tele-MANAS", "contact": "14416 / 1800-891-4416", "url": "https://telemanas.mohfw.gov.in"},
+    "kiran": {"name": "KIRAN Mental Health Helpline", "contact": "1800-599-0019", "url": "https://www.mohfw.gov.in"},
+    "icall": {"name": "iCall", "contact": "+91 91529 87821", "url": "https://icallhelpline.org"},
 }
 
 
@@ -90,11 +89,11 @@ def ensure_artifacts():
 
 @lru_cache(maxsize=1)
 def load_resources():
-    ensure_artifacts()
     try:
         nltk.download("vader_lexicon", quiet=True)
     except Exception:
         pass
+    ensure_artifacts()
     names = json.loads((ARTIFACT_DIR / "feature_names.json").read_text(encoding="utf-8"))
     return {
         "analyzer": SentimentIntensityAnalyzer(),

@@ -9,7 +9,7 @@
 An early risk screening web system designed to identify indicators of stress and mental health strain using multi-modal signals: linguistic features, daily routine behaviors, acoustic voice patterns, and visual appearance cues.
 
 > [!IMPORTANT]
-> **Medical Disclaimer**: This application is strictly an **early screening flag**, **NOT a clinical diagnosis**. It does not diagnose clinical conditions (such as Major Depressive Disorder or Generalized Anxiety Disorder) nor does it substitute for consultation with a licensed psychologist, psychiatrist, or medical doctor. Users in distress are immediately directed to 24/7 crisis hotlines and local healthcare professionals at [findahelpline.com](https://findahelpline.com/).
+> **Medical Disclaimer**: This application is strictly an **early screening flag**, **NOT a clinical diagnosis**. It does not diagnose clinical conditions (such as Major Depressive Disorder or Generalized Anxiety Disorder) nor does it substitute for consultation with a licensed psychologist, psychiatrist, or medical doctor. Users in distress are directed to India 24/7 helplines: Tele-MANAS (`14416`), KIRAN (`1800-599-0019`), and iCall (`+91 91529 87821`).
 
 ---
 
@@ -282,7 +282,7 @@ Text-to-speech audio synthesis endpoint powered by Cartesia Sonic AI:
 ## User Profile & Safety Configuration
 
 The application features a dedicated client-side profile editor:
-- **Personal Details**: Full name, pronouns, Gmail/email address, phone number.
+- **Personal Details**: Full name, Gmail/email address, phone number (+91).
 - **Emergency Contact**: Name, direct phone number, and relationship.
 - **Privacy by Design**: Stored securely in local browser storage, ensuring personal contact numbers and emails never leave the user's browser.
 - **Personalized Wellness Tip & Voice AI**: Automatically generates an intelligent, actionable daily tip (e.g., listening to favorite music, calling/connecting with friends, mindful pauses, gentle rest) tailored to the user's inputs, narrated immediately via Cartesia Sonic AI with fallback to Web Speech.
@@ -294,11 +294,10 @@ The application features a dedicated client-side profile editor:
 If the text contains expressions of self-harm or suicidal intent, the system triggers an immediate safety protocol:
 - Flags `crisis_detected: true`.
 - Automatically raises the risk banner to **High**.
-- Surfaces 24/7 direct-dial and online support helplines:
-  - **India**: Tele-MANAS (`14416` / `1800-891-4416`) & KIRAN (`1800-599-0019`)
-  - **US & Canada**: Suicide & Crisis Lifeline (`988`)
-  - **United Kingdom**: Samaritans (`116 123`)
-  - **International**: [findahelpline.com](https://findahelpline.com/)
+- Surfaces India 24/7 direct-dial support helplines:
+  - **Tele-MANAS**: `14416` / `1800-891-4416`
+  - **KIRAN**: `1800-599-0019`
+  - **iCall**: `+91 91529 87821`
 
 ---
 

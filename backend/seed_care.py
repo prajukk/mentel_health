@@ -57,7 +57,7 @@ def seed_care():
     Base.metadata.create_all(bind=ENGINE)
     db = SessionLocal()
     try:
-        ensure_user(db, "admin@care.local", "Care Admin", "admin", "admin123", "9000000001")
+        ensure_user(db, "admin@care.local", "Care Admin", "admin", "admin123", "+91 90000 00001")
 
         doctors = [
             (
@@ -68,7 +68,7 @@ def seed_care():
                 12,
                 800.0,
                 "Psychiatry consultant focusing on anxiety, stress, and mood support.",
-                "9000001001",
+                "+91 90000 01001",
             ),
             (
                 "dr.arjun@care.local",
@@ -78,7 +78,7 @@ def seed_care():
                 8,
                 650.0,
                 "Specialist in adolescent and young-adult mental health.",
-                "9000001002",
+                "+91 90000 01002",
             ),
             (
                 "dr.leena@care.local",
@@ -88,7 +88,7 @@ def seed_care():
                 15,
                 950.0,
                 "Senior psychiatrist with experience in depression and sleep-related strain.",
-                "9000001003",
+                "+91 90000 01003",
             ),
         ]
         for email, name, license_no, authority, years, fee, bio, phone in doctors:
@@ -112,11 +112,11 @@ def seed_care():
             else:
                 add_slots(db, user.doctor_profile)
 
-        patient = ensure_user(db, "patient@care.local", "Demo Patient", "patient", "patient123", "9000002001")
+        patient = ensure_user(db, "patient@care.local", "Demo Patient", "patient", "patient123", "+91 90000 02001")
         if not patient.patient_profile:
             db.add(PatientProfile(user_id=patient.id, approval_status="approved"))
 
-        pending = ensure_user(db, "pending.patient@care.local", "Pending Patient", "patient", "patient123", "9000002002")
+        pending = ensure_user(db, "pending.patient@care.local", "Pending Patient", "patient", "patient123", "+91 90000 02002")
         if not pending.patient_profile:
             db.add(PatientProfile(user_id=pending.id, approval_status="pending"))
 

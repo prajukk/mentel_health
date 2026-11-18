@@ -201,7 +201,13 @@ export default function Login({ onSignedIn }) {
           {creating && role === "patient" && (
             <label className="mt-5 block text-sm text-muted" htmlFor="phone">
               Phone / WhatsApp
-              <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} />
+              <input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +91 98765 43210"
+                className={fieldClass}
+              />
             </label>
           )}
 

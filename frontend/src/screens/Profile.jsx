@@ -137,7 +137,6 @@ export default function Profile({
                 </h1>
                 <p className="text-xs text-muted">
                   Signed in with Gmail: <span className="font-medium text-ink">{account}</span>
-                  {profile.pronouns && ` · (${profile.pronouns})`}
                 </p>
               </div>
             </div>
@@ -162,18 +161,7 @@ export default function Profile({
                     required
                     value={profile.fullName}
                     onChange={(e) => handleChange("fullName", e.target.value)}
-                    placeholder="e.g. Alex Johnson"
-                    className={fieldClass}
-                  />
-                </label>
-
-                <label className="block text-sm">
-                  <span className="font-medium text-ink">Pronouns</span>
-                  <input
-                    type="text"
-                    value={profile.pronouns}
-                    onChange={(e) => handleChange("pronouns", e.target.value)}
-                    placeholder="e.g. they/them, she/her, he/him"
+                    placeholder="e.g. Aarav Sharma"
                     className={fieldClass}
                   />
                 </label>
@@ -203,7 +191,7 @@ export default function Profile({
                     required
                     value={profile.phone}
                     onChange={(e) => handleChange("phone", e.target.value)}
-                    placeholder="e.g. +1 (555) 019-2834"
+                    placeholder="e.g. +91 98765 43210"
                     className={fieldClass}
                   />
                 </label>
@@ -231,7 +219,7 @@ export default function Profile({
                     required
                     value={profile.emergencyContactName}
                     onChange={(e) => handleChange("emergencyContactName", e.target.value)}
-                    placeholder="e.g. Sarah Connor"
+                    placeholder="e.g. Priya Sharma"
                     className="mt-1.5 w-full rounded-2xl border border-line bg-card px-4 py-2.5 text-sm text-ink outline-none focus:border-accent"
                   />
                 </label>
@@ -245,7 +233,7 @@ export default function Profile({
                     required
                     value={profile.emergencyContactPhone}
                     onChange={(e) => handleChange("emergencyContactPhone", e.target.value)}
-                    placeholder="e.g. +1 (555) 123-4567"
+                    placeholder="e.g. +91 98765 43210"
                     className="mt-1.5 w-full rounded-2xl border border-line bg-card px-4 py-2.5 text-sm text-ink outline-none focus:border-accent"
                   />
                 </label>

@@ -24,7 +24,14 @@ if str(NLTK_DIR) not in nltk.data.path:
 
 
 def ensure_vader():
-    return SentimentIntensityAnalyzer()
+    NLTK_DIR.mkdir(parents=True, exist_ok=True)
+    if str(NLTK_DIR) not in nltk.data.path:
+        nltk.data.path.insert(0, str(NLTK_DIR))
+    try:
+        return SentimentIntensityAnalyzer()
+    except LookupError:
+        nltk.download("vader_lexicon", download_dir=str(NLTK_DIR), quiet=True)
+        return SentimentIntensityAnalyzer()
 
 
 def write_sample_voice():

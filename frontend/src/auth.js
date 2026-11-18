@@ -86,9 +86,9 @@ export function ensureLocalShellAccount(email, name = "") {
       salt: "care-shell",
       hash: "care-shell",
       fullName: name || cleaned.split("@")[0],
-      phone: "0000000000",
+      phone: "+91 90000 00000",
       emergencyContactName: "Care Desk",
-      emergencyContactPhone: "0000000000",
+      emergencyContactPhone: "+91 90000 00001",
       profileComplete: true,
     }
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
@@ -110,7 +110,6 @@ export function getProfile(email) {
     emergencyContactName: record.emergencyContactName || "",
     emergencyContactPhone: record.emergencyContactPhone || "",
     emergencyContactRelation: record.emergencyContactRelation || "",
-    pronouns: record.pronouns || "",
     notes: record.notes || "",
     profileComplete: !!record.profileComplete,
   }
@@ -141,7 +140,6 @@ export function saveProfile(email, data) {
   const emergencyContactName = (data.emergencyContactName ?? accounts[key].emergencyContactName ?? "").trim()
   const emergencyContactPhone = (data.emergencyContactPhone ?? accounts[key].emergencyContactPhone ?? "").trim()
   const emergencyContactRelation = (data.emergencyContactRelation ?? accounts[key].emergencyContactRelation ?? "").trim()
-  const pronouns = (data.pronouns ?? accounts[key].pronouns ?? "").trim()
   const notes = (data.notes ?? accounts[key].notes ?? "").trim()
   const profileComplete = Boolean(fullName && phone && emergencyContactName && emergencyContactPhone)
 
@@ -154,7 +152,6 @@ export function saveProfile(email, data) {
     emergencyContactName,
     emergencyContactPhone,
     emergencyContactRelation,
-    pronouns,
     notes,
     profileComplete,
   }
